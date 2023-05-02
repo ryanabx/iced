@@ -12,7 +12,7 @@ use crate::{
 
 use std::borrow::Cow;
 
-pub use text::{LineHeight, Shaping};
+pub use text::{LineHeight, Shaping, Wrap};
 
 /// A paragraph of text.
 #[allow(missing_debug_implementations)]
@@ -20,6 +20,7 @@ pub struct Text<'a, Theme, Renderer>
 where
     Renderer: text::Renderer,
 {
+    id: crate::widget::Id,
     content: Cow<'a, str>,
     size: Option<Pixels>,
     line_height: LineHeight,
@@ -30,6 +31,7 @@ where
     font: Option<Renderer::Font>,
     shaping: Shaping,
     style: Style<'a, Theme>,
+    wrap: Wrap,
 }
 
 impl<'a, Theme, Renderer> Text<'a, Theme, Renderer>
@@ -42,6 +44,7 @@ where
         Theme: DefaultStyle + 'a,
     {
         Text {
+            id: crate::widget::Id::unique(),
             content: content.into(),
             size: None,
             line_height: LineHeight::default(),
@@ -51,6 +54,7 @@ where
             horizontal_alignment: alignment::Horizontal::Left,
             vertical_alignment: alignment::Vertical::Top,
             shaping: Shaping::Basic,
+            wrap: Default::default(),
             style: Box::new(Theme::default_style),
         }
     }
@@ -129,6 +133,12 @@ where
         self.shaping = shaping;
         self
     }
+
+    /// Sets the [`Wrap`] mode of the [`Text`].
+    pub fn wrap(mut self, wrap: Wrap) -> Self {
+        self.wrap = wrap;
+        self
+    }
 }
 
 /// The internal state of a [`Text`] widget.
@@ -174,6 +184,7 @@ where
             self.horizontal_alignment,
             self.vertical_alignment,
             self.shaping,
+            self.wrap,
         )
     }
 
@@ -192,6 +203,50 @@ where
 
         draw(renderer, style, layout, state, appearance, viewport);
     }
+
+    #[cfg(feature = "a11y")]
+    fn a11y_nodes(
+        &self,
+        layout: Layout<'_>,
+        _state: &Tree,
+        _: mouse::Cursor,
+    ) -> iced_accessibility::A11yTree {
+        use iced_accessibility::{
+            accesskit::{Live, NodeBuilder, Rect, Role},
+            A11yTree,
+        };
+
+        let Rectangle {
+            x,
+            y,
+            width,
+            height,
+        } = layout.bounds();
+        let bounds = Rect::new(
+            x as f64,
+            y as f64,
+            (x + width) as f64,
+            (y + height) as f64,
+        );
+
+        let mut node = NodeBuilder::new(Role::StaticText);
+
+        // TODO is the name likely different from the content?
+        node.set_name(self.content.to_string().into_boxed_str());
+        node.set_bounds(bounds);
+
+        // TODO make this configurable
+        node.set_live(Live::Polite);
+        A11yTree::leaf(node, self.id.clone())
+    }
+
+    fn id(&self) -> Option<crate::widget::Id> {
+        Some(self.id.clone())
+    }
+
+    fn set_id(&mut self, id: crate::widget::Id) {
+        self.id = id
+    }
 }
 
 /// Produces the [`layout::Node`] of a [`Text`] widget.
@@ -208,6 +263,7 @@ pub fn layout<Renderer>(
     horizontal_alignment: alignment::Horizontal,
     vertical_alignment: alignment::Vertical,
     shaping: Shaping,
+    wrap: Wrap,
 ) -> layout::Node
 where
     Renderer: text::Renderer,
@@ -229,6 +285,7 @@ where
             horizontal_alignment,
             vertical_alignment,
             shaping,
+            wrap,
         });
 
         paragraph.min_bounds()
@@ -290,6 +347,30 @@ where
         Element::new(text)
     }
 }
+
+// impl<'a, Theme, Renderer> Clone for Text<'a, Theme, Renderer>
+// where
+//     Renderer: text::Renderer,
+// {
+//     fn clone(&self) -> Self {
+//         Self {
+//             id: self.id.clone(),
+//             content: self.content.clone(),
+//             size: self.size,
+//             line_height: self.line_height,
+//             width: self.width,
+//             height: self.height,
+//             horizontal_alignment: self.horizontal_alignment,
+//             vertical_alignment: self.vertical_alignment,
+//             font: self.font,
+//             style: self.style,
+//             shaping: self.shaping,
+//             wrap: self.wrap,
+//         }
+//     }
+// }
+// TODO(POP): Clone no longer can be implemented because of style being a Box(style)
+
 
 impl<'a, Theme, Renderer> From<&'a str> for Text<'a, Theme, Renderer>
 where

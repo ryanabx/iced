@@ -39,6 +39,7 @@
 //!     ]
 //! }
 //! ```
+#[cfg(feature="winit")]
 use crate::application::{self, Application};
 use crate::executor::{self, Executor};
 use crate::window;
@@ -83,7 +84,7 @@ pub fn application<State, Message>(
 >
 where
     State: Default + 'static,
-    Message: Send + std::fmt::Debug,
+    Message: Send + std::fmt::Debug + 'static,
 {
     use std::marker::PhantomData;
 
@@ -98,7 +99,7 @@ where
         for Application<State, Message, Update, View>
     where
         State: Default,
-        Message: Send + std::fmt::Debug,
+        Message: Send + std::fmt::Debug + 'static,
         Update: self::Update<State, Message>,
         View: for<'a> self::View<'a, State, Message>,
     {
@@ -213,6 +214,7 @@ impl<P: Definition> Program<P> {
             default_font: settings.default_font,
             default_text_size: settings.default_text_size,
             antialiasing: settings.antialiasing,
+            exit_on_close_request: settings.exit_on_close_request,
         })
     }
 
@@ -342,7 +344,7 @@ pub trait Definition: Sized {
     type State;
 
     /// The message of the program.
-    type Message: Send + std::fmt::Debug;
+    type Message: Send + std::fmt::Debug + 'static;
 
     /// The theme of the program.
     type Theme: Default + application::DefaultStyle;

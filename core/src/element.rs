@@ -1,4 +1,5 @@
 use crate::event::{self, Event};
+use crate::id::Id;
 use crate::layout;
 use crate::mouse;
 use crate::overlay;
@@ -11,7 +12,7 @@ use crate::{
 };
 
 use std::any::Any;
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 
 /// A generic [`Widget`].
 ///
@@ -240,6 +241,37 @@ impl<'a, Message, Theme, Renderer>
     }
 }
 
+impl<'a, Message, Theme, Renderer>
+    Borrow<dyn Widget<Message, Theme, Renderer> + 'a>
+    for &mut Element<'a, Message, Theme, Renderer>
+{
+    fn borrow(&self) -> &(dyn Widget<Message, Theme, Renderer> + 'a) {
+        self.widget.borrow()
+    }
+}
+
+impl<'a, Message, Theme, Renderer>
+    BorrowMut<dyn Widget<Message, Theme, Renderer> + 'a>
+    for &mut Element<'a, Message, Theme, Renderer>
+{
+    fn borrow_mut(
+        &mut self,
+    ) -> &mut (dyn Widget<Message, Theme, Renderer> + 'a) {
+        self.widget.borrow_mut()
+    }
+}
+
+impl<'a, Message, Theme, Renderer>
+    BorrowMut<dyn Widget<Message, Theme, Renderer> + 'a>
+    for Element<'a, Message, Theme, Renderer>
+{
+    fn borrow_mut(
+        &mut self,
+    ) -> &mut (dyn Widget<Message, Theme, Renderer> + 'a) {
+        self.widget.borrow_mut()
+    }
+}
+
 struct Map<'a, A, B, Theme, Renderer> {
     widget: Box<dyn Widget<A, Theme, Renderer> + 'a>,
     mapper: Box<dyn Fn(A) -> B + 'a>,
@@ -279,8 +311,8 @@ where
         self.widget.children()
     }
 
-    fn diff(&self, tree: &mut Tree) {
-        self.widget.diff(tree);
+    fn diff(&mut self, tree: &mut Tree) {
+        self.widget.diff(tree)
     }
 
     fn size(&self) -> Size<Length> {
@@ -305,7 +337,9 @@ where
         tree: &mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn widget::Operation<B>,
+        operation: &mut dyn widget::Operation<
+            widget::OperationOutputWrapper<B>,
+        >,
     ) {
         struct MapOperation<'a, B> {
             operation: &'a mut dyn widget::Operation<B>,
@@ -433,6 +467,35 @@ where
             .overlay(tree, layout, renderer, translation)
             .map(move |overlay| overlay.map(mapper))
     }
+
+    #[cfg(feature = "a11y")]
+    fn a11y_nodes(
+        &self,
+        _layout: Layout<'_>,
+        _state: &Tree,
+        _cursor_position: mouse::Cursor,
+    ) -> iced_accessibility::A11yTree {
+        self.widget.a11y_nodes(_layout, _state, _cursor_position)
+    }
+
+    fn id(&self) -> Option<Id> {
+        self.widget.id()
+    }
+
+    fn set_id(&mut self, id: Id) {
+        self.widget.set_id(id);
+    }
+
+    fn drag_destinations(
+        &self,
+        state: &Tree,
+        layout: Layout<'_>,
+        renderer: &Renderer,
+        dnd_rectangles: &mut crate::clipboard::DndDestinationRectangles,
+    ) {
+        self.widget
+            .drag_destinations(state, layout, renderer, dnd_rectangles);
+    }
 }
 
 struct Explain<'a, Message, Theme, Renderer: crate::Renderer> {
@@ -477,7 +540,7 @@ where
         self.element.widget.children()
     }
 
-    fn diff(&self, tree: &mut Tree) {
+    fn diff(&mut self, tree: &mut Tree) {
         self.element.widget.diff(tree);
     }
 
@@ -495,7 +558,9 @@ where
         state: &mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn widget::Operation<Message>,
+        operation: &mut dyn widget::Operation<
+            widget::OperationOutputWrapper<Message>,
+        >,
     ) {
         self.element
             .widget
@@ -582,4 +647,28 @@ where
             .widget
             .overlay(state, layout, renderer, translation)
     }
+
+    fn id(&self) -> Option<Id> {
+        self.element.widget.id()
+    }
+
+    fn set_id(&mut self, id: Id) {
+        self.element.widget.set_id(id);
+    }
+
+    fn drag_destinations(
+        &self,
+        state: &Tree,
+        layout: Layout<'_>,
+        renderer: &Renderer,
+        dnd_rectangles: &mut crate::clipboard::DndDestinationRectangles,
+    ) {
+        self.element.widget.drag_destinations(
+            state,
+            layout,
+            renderer,
+            dnd_rectangles,
+        );
+    }
+    // TODO maybe a11y_nodes
 }

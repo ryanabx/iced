@@ -1,20 +1,23 @@
 use iced::alignment::{self, Alignment};
 use iced::font::{self, Font};
-use iced::keyboard;
+use iced::keyboard::{self, Modifiers};
+use iced::subscription;
 use iced::widget::{
     self, button, checkbox, column, container, keyed_column, row, scrollable,
     text, text_input, Text,
 };
 use iced::window;
 use iced::{
-    Application, Command, Element, Length, Settings, Size, Subscription, Theme,
+    Application, Color, Command, Element, Length, Settings, Size, Subscription,
+    Theme,
 };
+use iced_core::widget::Id;
 
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-static INPUT_ID: Lazy<text_input::Id> = Lazy::new(text_input::Id::unique);
+static INPUT_ID: Lazy<Id> = Lazy::new(Id::unique);
 
 pub fn main() -> iced::Result {
     #[cfg(not(target_arch = "wasm32"))]
@@ -198,6 +201,9 @@ impl Application for Todos {
     }
 
     fn view(&self) -> Element<Message> {
+        // row![
+        // button("Press me").on_press(Message::ToggleFullscreen(window::Mode::Fullscreen))
+        // ].into()
         match self {
             Todos::Loading => loading_message(),
             Todos::Loaded(State {
@@ -249,8 +255,9 @@ impl Application for Todos {
                         }
                     })
                 };
+                let test = row![container(text("0000 0000 00000 000000000000 000000000000000 00000 0000 00000000 000000 000000000 l00000")).width(Length::Fill), container(text("a")).width(Length::Fixed(100.0))];
 
-                let content = column![title, input, controls, tasks]
+                let content = column![title, input, controls, tasks, test]
                     .spacing(20)
                     .max_width(800);
 
@@ -316,8 +323,8 @@ pub enum TaskMessage {
 }
 
 impl Task {
-    fn text_input_id(i: usize) -> text_input::Id {
-        text_input::Id::new(format!("task-{i}"))
+    fn text_input_id(i: usize) -> Id {
+        Id::new(format!("task-{i}"))
     }
 
     fn new(description: String) -> Self {

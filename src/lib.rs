@@ -143,7 +143,7 @@
 //!   1. Draw the resulting user interface.
 //!
 //! # Usage
-//! The [`Application`] and [`Sandbox`] traits should get you started quickly,
+//! The `Application` trait should get you started quickly,
 //! streamlining all the process described above!
 //!
 //! [Elm]: https://elm-lang.org/
@@ -151,48 +151,76 @@
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/iced-rs/iced/9ab6923e943f784985e9ef9ca28b10278297225d/docs/logo.svg"
 )]
-#![forbid(rust_2018_idioms, unsafe_code)]
+#![forbid(unsafe_code)]
 #![deny(
     missing_debug_implementations,
     missing_docs,
-    unused_results,
-    rustdoc::broken_intra_doc_links
+    rust_2018_idioms,
+    rustdoc::broken_intra_doc_links,
+    unused_results
 )]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-use iced_widget::graphics;
-use iced_widget::renderer;
-use iced_winit as shell;
-use iced_winit::core;
-use iced_winit::runtime;
+
+#[cfg(all(feature = "wayland", feature = "winit"))]
+compile_error!("cannot use `wayland` feature with `winit");
 
 pub use iced_futures::futures;
+use iced_widget::graphics;
+use iced_widget::renderer;
+
+#[cfg(feature = "wayland")]
+use iced_sctk as shell;
+#[cfg(feature = "winit")]
+use iced_winit as shell;
+#[cfg(any(feature = "winit", feature = "wayland"))]
+use shell::core;
+#[cfg(any(feature = "winit", feature = "wayland"))]
+use shell::runtime;
 
 #[cfg(feature = "highlighter")]
 pub use iced_highlighter as highlighter;
+#[cfg(not(any(feature = "winit", feature = "wayland")))]
+pub use iced_widget::core;
+#[cfg(not(any(feature = "winit", feature = "wayland")))]
+pub use iced_widget::runtime;
 
 mod error;
-mod sandbox;
 
-pub mod application;
-pub mod program;
 pub mod settings;
 pub mod time;
 pub mod window;
 
+#[cfg(feature = "winit")]
+pub mod application;
+#[cfg(feature = "winit")]
+pub mod program;
+#[cfg(feature = "winit")]
+mod sandbox;
+
+/// wayland application
+#[cfg(feature = "wayland")]
+pub mod wayland;
+#[cfg(feature = "wayland")]
+pub use wayland::sandbox;
+#[cfg(feature = "wayland")]
+pub use wayland::program;
+#[cfg(feature = "wayland")]
+pub use wayland::Application;
+
 #[cfg(feature = "advanced")]
 pub mod advanced;
 
-#[cfg(feature = "multi-window")]
+#[cfg(all(feature = "winit", feature = "multi-window"))]
 pub mod multi_window;
 
 pub use crate::core::alignment;
-pub use crate::core::border;
+pub use crate::core::border::{self, Radius};
 pub use crate::core::color;
 pub use crate::core::gradient;
 pub use crate::core::theme;
 pub use crate::core::{
-    Alignment, Background, Border, Color, ContentFit, Degrees, Gradient,
+    id, Alignment, Background, Border, Color, ContentFit, Degrees, Gradient,
     Length, Padding, Pixels, Point, Radians, Rectangle, Shadow, Size, Theme,
     Transformation, Vector,
 };
@@ -200,8 +228,10 @@ pub use crate::core::{
 pub mod clipboard {
     //! Access the clipboard.
     pub use crate::runtime::clipboard::{
-        read, read_primary, write, write_primary,
+        read, read_data, read_primary, read_primary_data, write, write_primary,
     };
+    pub use dnd;
+    pub use mime;
 }
 
 pub mod executor {
@@ -229,6 +259,8 @@ pub mod font {
 
 pub mod event {
     //! Handle events of a user interface.
+    #[cfg(feature = "wayland")]
+    pub use crate::core::event::wayland;
     pub use crate::core::event::{Event, MacOS, PlatformSpecific, Status};
     pub use iced_futures::event::{listen, listen_raw, listen_with};
 }
@@ -303,6 +335,7 @@ pub mod widget {
     mod runtime {}
 }
 
+#[cfg(feature = "winit")]
 pub use application::Application;
 pub use command::Command;
 pub use error::Error;
@@ -311,6 +344,7 @@ pub use executor::Executor;
 pub use font::Font;
 pub use program::Program;
 pub use renderer::Renderer;
+#[cfg(any(feature = "winit", feature = "wayland"))]
 pub use sandbox::Sandbox;
 pub use settings::Settings;
 pub use subscription::Subscription;
@@ -325,9 +359,7 @@ pub type Element<
     Renderer = crate::Renderer,
 > = crate::core::Element<'a, Message, Theme, Renderer>;
 
-/// The result of running an [`Application`].
-///
-/// [`Application`]: crate::Application
+/// The result of running an application.
 pub type Result = std::result::Result<(), Error>;
 
 /// Runs a basic iced application with default [`Settings`] given
