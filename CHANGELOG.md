@@ -129,6 +129,11 @@ Many thanks to...
 - @tzemanovic
 - @william-shere
 
+Many thanks to...
+- @edfloreshz
+- @jackpot51
+- @wash2
+
 ## [0.10.0] - 2023-07-28
 ### Added
 - Text shaping, font fallback, and `iced_wgpu` overhaul. [#1697](https://github.com/iced-rs/iced/pull/1697)

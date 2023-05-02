@@ -1,5 +1,6 @@
 //! Display images in your user interface.
 pub mod viewer;
+use iced_runtime::core::widget::Id;
 pub use viewer::Viewer;
 
 use crate::core::image;
@@ -14,6 +15,9 @@ use crate::core::{
 use std::hash::Hash;
 
 pub use image::{FilterMethod, Handle};
+
+#[cfg(feature = "a11y")]
+use std::borrow::Cow;
 
 /// Creates a new [`Viewer`] with the given image `Handle`.
 pub fn viewer<Handle>(handle: Handle) -> Viewer<Handle> {
@@ -32,24 +36,48 @@ pub fn viewer<Handle>(handle: Handle) -> Viewer<Handle> {
 ///
 /// <img src="https://github.com/iced-rs/iced/blob/9712b319bb7a32848001b96bd84977430f14b623/examples/resources/ferris.png?raw=true" width="300">
 #[derive(Debug)]
-pub struct Image<Handle> {
+pub struct Image<'a, Handle> {
+    id: Id,
+    #[cfg(feature = "a11y")]
+    name: Option<Cow<'a, str>>,
+    #[cfg(feature = "a11y")]
+    description: Option<iced_accessibility::Description<'a>>,
+    #[cfg(feature = "a11y")]
+    label: Option<Vec<iced_accessibility::accesskit::NodeId>>,
     handle: Handle,
     width: Length,
     height: Length,
     content_fit: ContentFit,
     filter_method: FilterMethod,
+    border_radius: [f32; 4],
+    phantom_data: std::marker::PhantomData<&'a ()>,
 }
 
-impl<Handle> Image<Handle> {
+impl<'a, Handle> Image<'a, Handle> {
     /// Creates a new [`Image`] with the given path.
     pub fn new<T: Into<Handle>>(handle: T) -> Self {
         Image {
+            id: Id::unique(),
+            #[cfg(feature = "a11y")]
+            name: None,
+            #[cfg(feature = "a11y")]
+            description: None,
+            #[cfg(feature = "a11y")]
+            label: None,
             handle: handle.into(),
             width: Length::Shrink,
             height: Length::Shrink,
             content_fit: ContentFit::Contain,
             filter_method: FilterMethod::default(),
+            border_radius: [0.0; 4],
+            phantom_data: std::marker::PhantomData,
         }
+    }
+
+    /// Sets the border radius of the image.
+    pub fn border_radius(mut self, border_radius: [f32; 4]) -> Self {
+        self.border_radius = border_radius;
+        self
     }
 
     /// Sets the width of the [`Image`] boundaries.
@@ -77,6 +105,41 @@ impl<Handle> Image<Handle> {
         self.filter_method = filter_method;
         self
     }
+
+    #[cfg(feature = "a11y")]
+    /// Sets the name of the [`Button`].
+    pub fn name(mut self, name: impl Into<Cow<'a, str>>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    #[cfg(feature = "a11y")]
+    /// Sets the description of the [`Button`].
+    pub fn description_widget<T: iced_accessibility::Describes>(
+        mut self,
+        description: &T,
+    ) -> Self {
+        self.description = Some(iced_accessibility::Description::Id(
+            description.description(),
+        ));
+        self
+    }
+
+    #[cfg(feature = "a11y")]
+    /// Sets the description of the [`Button`].
+    pub fn description(mut self, description: impl Into<Cow<'a, str>>) -> Self {
+        self.description =
+            Some(iced_accessibility::Description::Text(description.into()));
+        self
+    }
+
+    #[cfg(feature = "a11y")]
+    /// Sets the label of the [`Button`].
+    pub fn label(mut self, label: &dyn iced_accessibility::Labels) -> Self {
+        self.label =
+            Some(label.label().into_iter().map(|l| l.into()).collect());
+        self
+    }
 }
 
 /// Computes the layout of an [`Image`].
@@ -87,6 +150,7 @@ pub fn layout<Renderer, Handle>(
     width: Length,
     height: Length,
     content_fit: ContentFit,
+    _border_radius: [f32; 4],
 ) -> layout::Node
 where
     Renderer: image::Renderer<Handle = Handle>,
@@ -126,6 +190,7 @@ pub fn draw<Renderer, Handle>(
     handle: &Handle,
     content_fit: ContentFit,
     filter_method: FilterMethod,
+    border_radius: [f32; 4],
 ) where
     Renderer: image::Renderer<Handle = Handle>,
     Handle: Clone + Hash,
@@ -148,7 +213,12 @@ pub fn draw<Renderer, Handle>(
             ..bounds
         };
 
-        renderer.draw(handle.clone(), filter_method, drawing_bounds + offset);
+        renderer.draw(
+            handle.clone(),
+            filter_method,
+            drawing_bounds + offset,
+            border_radius,
+        );
     };
 
     if adjusted_fit.width > bounds.width || adjusted_fit.height > bounds.height
@@ -159,8 +229,8 @@ pub fn draw<Renderer, Handle>(
     }
 }
 
-impl<Message, Theme, Renderer, Handle> Widget<Message, Theme, Renderer>
-    for Image<Handle>
+impl<'a, Message, Theme, Renderer, Handle> Widget<Message, Theme, Renderer>
+    for Image<'a, Handle>
 where
     Renderer: image::Renderer<Handle = Handle>,
     Handle: Clone + Hash,
@@ -185,6 +255,7 @@ where
             self.width,
             self.height,
             self.content_fit,
+            self.border_radius,
         )
     }
 
@@ -204,17 +275,78 @@ where
             &self.handle,
             self.content_fit,
             self.filter_method,
+            self.border_radius,
         );
+    }
+
+    #[cfg(feature = "a11y")]
+    fn a11y_nodes(
+        &self,
+        layout: Layout<'_>,
+        _state: &Tree,
+        _cursor: mouse::Cursor,
+    ) -> iced_accessibility::A11yTree {
+        use iced_accessibility::{
+            accesskit::{NodeBuilder, NodeId, Rect, Role},
+            A11yTree,
+        };
+
+        let bounds = layout.bounds();
+        let Rectangle {
+            x,
+            y,
+            width,
+            height,
+        } = bounds;
+        let bounds = Rect::new(
+            x as f64,
+            y as f64,
+            (x + width) as f64,
+            (y + height) as f64,
+        );
+        let mut node = NodeBuilder::new(Role::Image);
+        node.set_bounds(bounds);
+        if let Some(name) = self.name.as_ref() {
+            node.set_name(name.clone());
+        }
+        match self.description.as_ref() {
+            Some(iced_accessibility::Description::Id(id)) => {
+                node.set_described_by(
+                    id.iter()
+                        .cloned()
+                        .map(|id| NodeId::from(id))
+                        .collect::<Vec<_>>(),
+                );
+            }
+            Some(iced_accessibility::Description::Text(text)) => {
+                node.set_description(text.clone());
+            }
+            None => {}
+        }
+
+        if let Some(label) = self.label.as_ref() {
+            node.set_labelled_by(label.clone());
+        }
+
+        A11yTree::leaf(node, self.id.clone())
+    }
+
+    fn id(&self) -> Option<Id> {
+        Some(self.id.clone())
+    }
+
+    fn set_id(&mut self, id: Id) {
+        self.id = id;
     }
 }
 
-impl<'a, Message, Theme, Renderer, Handle> From<Image<Handle>>
+impl<'a, Message, Theme, Renderer, Handle> From<Image<'a, Handle>>
     for Element<'a, Message, Theme, Renderer>
 where
     Renderer: image::Renderer<Handle = Handle>,
     Handle: Clone + Hash + 'a,
 {
-    fn from(image: Image<Handle>) -> Element<'a, Message, Theme, Renderer> {
+    fn from(image: Image<'a, Handle>) -> Element<'a, Message, Theme, Renderer> {
         Element::new(image)
     }
 }
