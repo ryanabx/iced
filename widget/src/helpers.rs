@@ -1,4 +1,6 @@
 //! Helper functions to create pure widgets.
+use iced_runtime::core::widget::OperationOutputWrapper;
+
 use crate::button::{self, Button};
 use crate::checkbox::{self, Checkbox};
 use crate::combo_box::{self, ComboBox};
@@ -25,6 +27,10 @@ use crate::vertical_slider::{self, VerticalSlider};
 use crate::{Column, MouseArea, Row, Space, Stack, Themer};
 
 use std::borrow::{Borrow, Cow};
+#[cfg(feature = "wayland")]
+use crate::dnd_listener::DndListener;
+#[cfg(feature = "wayland")]
+use crate::dnd_source::DndSource;
 use std::ops::RangeInclusive;
 
 /// Creates a [`Column`] with the given children.
@@ -248,8 +254,8 @@ where
             self.content.as_widget().children()
         }
 
-        fn diff(&self, tree: &mut Tree) {
-            self.content.as_widget().diff(tree);
+        fn diff(&mut self, tree: &mut Tree) {
+            self.content.as_widget_mut().diff(tree);
         }
 
         fn size(&self) -> Size<Length> {
@@ -289,7 +295,7 @@ where
             state: &mut Tree,
             layout: Layout<'_>,
             renderer: &Renderer,
-            operation: &mut dyn operation::Operation<()>,
+            operation: &mut dyn operation::Operation<OperationOutputWrapper<()>>,
         ) {
             self.content
                 .as_widget()
@@ -414,8 +420,8 @@ where
             vec![Tree::new(&self.base), Tree::new(&self.top)]
         }
 
-        fn diff(&self, tree: &mut Tree) {
-            tree.diff_children(&[&self.base, &self.top]);
+        fn diff(&mut self, tree: &mut Tree) {
+            tree.diff_children(&mut [&mut self.base, &mut self.top]);
         }
 
         fn size(&self) -> Size<Length> {
@@ -491,7 +497,7 @@ where
             tree: &mut Tree,
             layout: Layout<'_>,
             renderer: &Renderer,
-            operation: &mut dyn operation::Operation<()>,
+            operation: &mut dyn operation::Operation<OperationOutputWrapper<()>>,
         ) {
             let children = [&self.base, &self.top]
                 .into_iter()
@@ -908,7 +914,10 @@ where
 ///
 /// [`Image`]: crate::Image
 #[cfg(feature = "image")]
-pub fn image<Handle>(handle: impl Into<Handle>) -> crate::Image<Handle> {
+#[cfg_attr(docsrs, doc(cfg(feature = "image")))]
+pub fn image<'a, Handle>(
+    handle: impl Into<Handle>,
+) -> crate::Image<'a, Handle> {
     crate::Image::new(handle.into())
 }
 
@@ -1037,4 +1046,26 @@ where
     NewTheme: Clone,
 {
     Themer::new(move |_| new_theme.clone(), content)
+}
+
+#[cfg(feature = "wayland")]
+/// A container for a dnd source
+pub fn dnd_source<'a, Message, Theme, Renderer>(
+    widget: impl Into<Element<'a, Message, Theme, Renderer>>,
+) -> DndSource<'a, Message, Theme, Renderer>
+where
+    Renderer: core::Renderer,
+{
+    DndSource::new(widget)
+}
+
+#[cfg(feature = "wayland")]
+/// A container for a dnd target
+pub fn dnd_listener<'a, Message, Theme, Renderer>(
+    widget: impl Into<Element<'a, Message, Theme, Renderer>>,
+) -> DndListener<'a, Message, Theme, Renderer>
+where
+    Renderer: core::Renderer,
+{
+    DndListener::new(widget)
 }

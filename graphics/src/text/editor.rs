@@ -30,7 +30,15 @@ impl Editor {
         Self::default()
     }
 
-    /// Returns the buffer of the [`Editor`].
+    /// Runs a closure with the buffer of the [`Editor`].
+    pub fn with_buffer<F: FnOnce(&cosmic_text::Buffer) -> T, T>(
+        &self,
+        f: F,
+    ) -> T {
+        self.internal().editor.with_buffer(f)
+    }
+
+    /// Returns the buffer of the `Paragraph`.
     pub fn buffer(&self) -> &cosmic_text::Buffer {
         buffer_from_editor(&self.internal().editor)
     }
@@ -90,14 +98,16 @@ impl editor::Editor for Editor {
     }
 
     fn line(&self, index: usize) -> Option<&str> {
-        self.buffer()
-            .lines
-            .get(index)
-            .map(cosmic_text::BufferLine::text)
+        let buffer = match self.internal().editor.buffer_ref() {
+            cosmic_text::BufferRef::Owned(buffer) => buffer,
+            cosmic_text::BufferRef::Borrowed(buffer) => buffer,
+            cosmic_text::BufferRef::Arc(buffer) => buffer,
+        };
+        buffer.lines.get(index).map(cosmic_text::BufferLine::text)
     }
 
     fn line_count(&self) -> usize {
-        self.buffer().lines.len()
+        self.with_buffer(|buffer| buffer.lines.len())
     }
 
     fn selection(&self) -> Option<String> {
@@ -192,36 +202,43 @@ impl editor::Editor for Editor {
                             cosmic_text::Affinity::Before => {
                                 cursor.index <= end
                             }
-                            cosmic_text::Affinity::After => cursor.index < end,
-                        };
+                        })
+                        .collect();
 
-                        if is_cursor_before_start {
-                            // Sometimes, the glyph we are looking for is right
-                            // between lines. This can happen when a line wraps
-                            // on a space.
-                            // In that case, we can assume the cursor is at the
-                            // end of the previous line.
-                            // i is guaranteed to be > 0 because `start` is always
-                            // 0 for the first line, so there is no way for the
-                            // cursor to be before it.
-                            Some((i - 1, layout[i - 1].w))
-                        } else if is_cursor_before_end {
-                            let offset = line
+                    Cursor::Selection(regions)
+                }
+                _ => {
+                    let line_height = buffer.metrics().line_height;
+
+                    let visual_lines_offset =
+                        visual_lines_offset(cursor.line, buffer);
+
+                    let line = buffer
+                        .lines
+                        .get(cursor.line)
+                        .expect("Cursor line should be present");
+
+                    let layout = line
+                        .layout_opt()
+                        .as_ref()
+                        .expect("Line layout should be cached");
+
+                    let mut lines = layout.iter().enumerate();
+
+                    let (visual_line, offset) = lines
+                        .find_map(|(i, line)| {
+                            let start = line
                                 .glyphs
-                                .iter()
-                                .take_while(|glyph| cursor.index > glyph.start)
-                                .map(|glyph| glyph.w)
-                                .sum();
+                                .first()
+                                .map(|glyph| glyph.start)
+                                .unwrap_or(0);
+                            let end = line
+                                .glyphs
+                                .last()
+                                .map(|glyph| glyph.end)
+                                .unwrap_or(0);
 
-                            Some((i, offset))
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or((
-                        layout.len().saturating_sub(1),
-                        layout.last().map(|line| line.w).unwrap_or(0.0),
-                    ));
+                            let is_cursor_before_start = start > cursor.index;
 
                 Cursor::Caret(Point::new(
                     offset,
@@ -230,7 +247,7 @@ impl editor::Editor for Editor {
                         - buffer.scroll().vertical,
                 ))
             }
-        }
+        })
     }
 
     fn cursor_position(&self) -> (usize, usize) {
@@ -572,23 +589,29 @@ impl editor::Editor for Editor {
         {
             let mut list = cosmic_text::AttrsList::new(attributes);
 
-            for (range, highlight) in highlighter.highlight_line(line.text()) {
-                let format = format_highlight(&highlight);
+                for (range, highlight) in
+                    highlighter.highlight_line(line.text())
+                {
+                    let format = format_highlight(&highlight);
 
-                if format.color.is_some() || format.font.is_some() {
-                    list.add_span(
-                        range,
-                        cosmic_text::Attrs {
-                            color_opt: format.color.map(text::to_color),
-                            ..if let Some(font) = format.font {
-                                text::to_attributes(font)
-                            } else {
-                                attributes
-                            }
-                        },
-                    );
+                    if format.color.is_some() || format.font.is_some() {
+                        list.add_span(
+                            range,
+                            cosmic_text::Attrs {
+                                color_opt: format.color.map(text::to_color),
+                                ..if let Some(font) = format.font {
+                                    text::to_attributes(font)
+                                } else {
+                                    attributes
+                                }
+                            },
+                        );
+                    }
                 }
+
+                let _ = line.set_attrs_list(list);
             }
+        });
 
             let _ = line.set_attrs_list(list);
         }

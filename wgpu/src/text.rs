@@ -581,15 +581,15 @@ fn prepare(
                         return None;
                     };
 
-                    let (width, height) = buffer.size();
+                    let (width_opt, height_opt) = buffer.size();
 
                     (
                         buffer.as_ref(),
                         Rectangle::new(
                             raw.position,
                             Size::new(
-                                width.unwrap_or(layer_bounds.width),
-                                height.unwrap_or(layer_bounds.height),
+                                width_opt.unwrap_or(layer_bounds.width),
+                                height_opt.unwrap_or(layer_bounds.height),
                             ),
                         ),
                         alignment::Horizontal::Left,

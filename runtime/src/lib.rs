@@ -10,6 +10,7 @@
 )]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 pub mod clipboard;
+pub mod dnd;
 pub mod font;
 pub mod keyboard;
 pub mod overlay;
@@ -18,6 +19,7 @@ pub mod system;
 pub mod task;
 pub mod user_interface;
 pub mod window;
+pub mod platform_specific;
 
 #[cfg(feature = "multi-window")]
 pub mod multi_window;
@@ -61,6 +63,12 @@ pub enum Action<T> {
     /// Run a widget operation.
     Widget(Box<dyn widget::Operation<()>>),
 
+    /// Run a Dnd action.
+    Dnd(crate::dnd::DndAction<T>),
+
+    /// Run a platform specific action
+    PlatformSpecific(crate::platform_specific::Action<T>),
+
     /// Run a clipboard action.
     Clipboard(clipboard::Action),
 
@@ -93,6 +101,10 @@ impl<T> Action<T> {
             Action::Clipboard(action) => Err(Action::Clipboard(action)),
             Action::Window(action) => Err(Action::Window(action)),
             Action::System(action) => Err(Action::System(action)),
+            Self::PlatformSpecific(action) => {
+                Err(Action::PlatformSpecific(action))
+            }
+            Self::Dnd(action) => Err(Action::Dnd(action)),
             Action::Exit => Err(Action::Exit),
         }
     }
@@ -116,6 +128,10 @@ where
             }
             Action::Window(_) => write!(f, "Action::Window"),
             Action::System(action) => write!(f, "Action::System({action:?})"),
+            Self::PlatformSpecific(action) => {
+                write!(f, "Action::PlatformSpecific({:?})", action)
+            }
+            Self::Dnd(action) => write!(f, "Action::Dnd({:?})", action),
             Action::Exit => write!(f, "Action::Exit"),
         }
     }

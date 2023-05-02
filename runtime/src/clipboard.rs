@@ -1,4 +1,5 @@
 //! Access the clipboard.
+use window_clipboard::mime::{AllowedMimeTypes, AsMimeTypes};
 use crate::core::clipboard::Kind;
 use crate::futures::futures::channel::oneshot;
 use crate::task::{self, Task};
@@ -22,6 +23,21 @@ pub enum Action {
         target: Kind,
         /// The contents to be written.
         contents: String,
+    },
+
+    #[allow(clippy::type_complexity)]
+    /// Read the clipboard and produce `T` with the result.
+    ReadData {
+        mimes: Vec<String>,
+        contents: Box<dyn Fn(Option<(Vec<u8>, String)>) -> T>,
+        target: Kind,
+    },
+
+    WriteData {
+        /// The clipboard target.
+        target: Kind,
+        /// The contents to be written.
+        contents: Box<dyn AsMimeTypes + Send + Sync + 'static>,
     },
 }
 
@@ -59,4 +75,85 @@ pub fn write_primary<Message>(contents: String) -> Task<Message> {
         target: Kind::Primary,
         contents,
     }))
+}
+
+/// Read the current contents of the clipboard.
+pub fn read_data(mimes: Vec<String>) -> Task<Option<String>> {
+    task::oneshot(|channel| {
+        crate::Action::Clipboard(Action::ReadData {
+            target: Kind::Standard,
+            mimes,
+        })
+    })
+}
+
+/// Read the current contents of the primary clipboard.
+pub fn read_data_primary(mimes: Vec<String>) -> Task<Option<String>> {
+    task::oneshot(|channel| {
+        crate::Action::Clipboard(Action::ReadData {
+            target: Kind::Primary,
+            mimes,
+        })
+    })
+}
+
+/// Write the given contents to the clipboard.
+pub fn write_data<T>(contents: Box<dyn AsMimeTypes + Send + Sync + 'static>) -> Task<T> {
+    task::effect(crate::Action::Clipboard(Action::WriteData {
+        target: Kind::Standard,
+        contents,
+    }))
+}
+
+/// Write the given contents to the primary clipboard.
+pub fn write_data_primary<Message>(contents: Box<dyn AsMimeTypes + Send + Sync + 'static>) -> Task<Message> {
+    task::effect(crate::Action::Clipboard(Action::WriteData {
+        target: Kind::Primary,
+        contents,
+    }))
+}
+
+/// Read the current contents of the clipboard.
+pub fn read_data<T: AllowedMimeTypes + Send + Sync + 'static, Message>(
+    f: impl Fn(Option<T>) -> Message + 'static,
+) -> Command<Message> {
+    Command::single(command::Action::Clipboard(Action::ReadData(
+        T::allowed().into(),
+        Box::new(move |d| f(d.and_then(|d| T::try_from(d).ok()))),
+        Kind::Standard,
+    )))
+}
+
+/// Write the given contents to the clipboard.
+pub fn write_data<Message>(
+    contents: impl AsMimeTypes + std::marker::Sync + std::marker::Send + 'static,
+) -> Command<Message> {
+    Command::single(command::Action::Clipboard(Action::WriteData(
+        Box::new(contents),
+        Kind::Standard,
+    )))
+}
+
+/// Read the current contents of the clipboard.
+pub fn read_primary_data<
+    T: AllowedMimeTypes + Send + Sync + 'static,
+    Message,
+>(
+    f: impl Fn(Option<T>) -> Message + 'static,
+) -> Command<Message> {
+    Command::single(command::Action::Clipboard(Action::ReadData(
+        T::allowed().into(),
+        Box::new(move |d| f(d.and_then(|d| T::try_from(d).ok()))),
+        Kind::Primary,
+    )))
+}
+
+/// Write the given contents to the clipboard.
+pub fn write_primary_data<Message>(
+    contents: impl AsMimeTypes + std::marker::Sync + std::marker::Send + 'static,
+) -> Command<Message> {
+    Command::single(command::Action::Clipboard(Action::WriteData(
+        Box::new(contents),
+        Kind::Primary,
+    )))
 }

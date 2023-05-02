@@ -1,12 +1,12 @@
 //! Build window-based GUI applications.
 pub mod screenshot;
 
+pub use crate::core::window::Id;
+
 pub use screenshot::Screenshot;
 
 use crate::core::time::Instant;
-use crate::core::window::{
-    Event, Icon, Id, Level, Mode, Settings, UserAttention,
-};
+use crate::core::window::{Event, Icon, Level, Mode, Settings, UserAttention};
 use crate::core::{Point, Size};
 use crate::futures::event;
 use crate::futures::futures::channel::oneshot;
@@ -157,6 +157,27 @@ pub enum Action {
 pub fn frames() -> Subscription<Instant> {
     event::listen_raw(|event, _status, _window| match event {
         crate::core::Event::Window(Event::RedrawRequested(at)) => Some(at),
+        _ => None,
+    })
+}
+
+#[cfg(feature = "wayland")]
+/// Subscribes to the frames of the window of the running application.
+///
+/// The resulting [`Subscription`] will produce items at a rate equal to the
+/// refresh rate of the window. Note that this rate may be variable, as it is
+/// normally managed by the graphics driver and/or the OS.
+///
+/// In any case, this [`Subscription`] is useful to smoothly draw application-driven
+/// animations without missing any frames.
+pub fn wayland_frames() -> Subscription<Instant> {
+    event::listen_raw(|event, _status| match event {
+        iced_core::Event::Window(id, Event::RedrawRequested(at))
+        | iced_core::Event::PlatformSpecific(
+            iced_core::event::PlatformSpecific::Wayland(
+                iced_core::event::wayland::Event::Frame(at, _, id),
+            ),
+        ) => Some(at),
         _ => None,
     })
 }

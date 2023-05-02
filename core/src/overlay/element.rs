@@ -4,7 +4,7 @@ use crate::event::{self, Event};
 use crate::layout;
 use crate::mouse;
 use crate::renderer;
-use crate::widget;
+use crate::widget::{self, Operation, OperationOutputWrapper};
 use crate::{Clipboard, Layout, Point, Rectangle, Shell, Size};
 
 /// A generic [`Overlay`].
@@ -92,7 +92,7 @@ where
         &mut self,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn widget::Operation<()>,
+        operation: &mut dyn widget::Operation<OperationOutputWrapper<()>>,
     ) {
         self.overlay.operate(layout, renderer, operation);
     }
@@ -144,7 +144,7 @@ where
         &mut self,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn widget::Operation<()>,
+        operation: &mut dyn widget::Operation<OperationOutputWrapper<()>>,
     ) {
         self.content.operate(layout, renderer, operation);
     }

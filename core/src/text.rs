@@ -41,6 +41,9 @@ pub struct Text<Content = String, Font = crate::Font> {
 
     /// The [`Shaping`] strategy of the [`Text`].
     pub shaping: Shaping,
+
+    /// The [`Wrap`] mode of the [`Text`].
+    pub wrap: Wrap,
 }
 
 /// The shaping strategy of some text.
@@ -67,6 +70,22 @@ pub enum Shaping {
     Advanced,
 }
 
+/// The wrap mode of some text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Wrap {
+    /// No wraping
+    None,
+    /// Wraps at a glyph level
+    Glyph,
+    /// Wraps at a word level
+    Word,
+    /// Wraps at the word level, or fallback to glyph level if a word can't fit on a line by itself
+    ///
+    /// This is the default
+    #[default]
+    WordOrGlyph,
+}
+
 /// The height of a line of text in a paragraph.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LineHeight {
@@ -89,7 +108,7 @@ impl LineHeight {
 
 impl Default for LineHeight {
     fn default() -> Self {
-        Self::Relative(1.3)
+        Self::Relative(1.4)
     }
 }
 
@@ -174,6 +193,9 @@ pub trait Renderer: crate::Renderer {
     /// The [`Editor`] of this [`Renderer`].
     type Editor: Editor<Font = Self::Font> + 'static;
 
+    /// The Raw of this [`Renderer`].
+    type Raw;
+
     /// The icon font of the backend.
     const ICON_FONT: Self::Font;
 
@@ -212,6 +234,9 @@ pub trait Renderer: crate::Renderer {
         color: Color,
         clip_bounds: Rectangle,
     );
+
+    /// Draws the given Raw
+    fn fill_raw(&mut self, raw: Self::Raw);
 
     /// Draws the given [`Text`] at the given position and with the given
     /// [`Color`].
