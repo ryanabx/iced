@@ -1,15 +1,20 @@
-use crate::futures::futures::{
-    channel::mpsc,
-    select,
-    task::{Context, Poll},
-    Future, Sink, StreamExt,
+use dnd::{DndEvent, DndSurface};
+
+use crate::{
+    application::UserEventWrapper,
+    futures::futures::{
+        channel::mpsc,
+        select,
+        task::{Context, Poll},
+        Future, Sink, StreamExt,
+    },
 };
 use std::pin::Pin;
 
 /// An event loop proxy with backpressure that implements `Sink`.
 #[derive(Debug)]
 pub struct Proxy<Message: 'static> {
-    raw: winit::event_loop::EventLoopProxy<Message>,
+    pub(crate) raw: winit::event_loop::EventLoopProxy<Message>,
     sender: mpsc::Sender<Message>,
     notifier: mpsc::Sender<usize>,
 }
@@ -128,5 +133,21 @@ impl<Message: 'static> Sink<Message> for Proxy<Message> {
     ) -> Poll<Result<(), Self::Error>> {
         self.sender.disconnect();
         Poll::Ready(Ok(()))
+    }
+}
+
+impl<M> dnd::Sender<DndSurface> for Proxy<UserEventWrapper<M>> {
+    fn send(
+        &self,
+        event: DndEvent<DndSurface>,
+    ) -> Result<(), std::sync::mpsc::SendError<DndEvent<DndSurface>>> {
+        self.raw
+            .send_event(UserEventWrapper::Dnd(event))
+            .map_err(|_err| {
+                std::sync::mpsc::SendError(DndEvent::Offer(
+                    None,
+                    dnd::OfferEvent::Leave,
+                ))
+            })
     }
 }

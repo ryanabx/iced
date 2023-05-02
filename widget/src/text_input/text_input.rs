@@ -1,15 +1,14 @@
 //! Display fields that can be filled with text.
 //!
 //! A [`TextInput`] has some local [`State`].
-mod editor;
-mod value;
+pub use super::cursor::Cursor;
+pub use super::value::Value;
 
-pub mod cursor;
+use super::cursor;
 
-pub use cursor::Cursor;
-pub use value::Value;
+use super::editor::Editor;
 
-use editor::Editor;
+use iced_renderer::core::widget::OperationOutputWrapper;
 
 use crate::core::alignment;
 use crate::core::clipboard::{self, Clipboard};
@@ -22,9 +21,9 @@ use crate::core::renderer;
 use crate::core::text::{self, Paragraph as _, Text};
 use crate::core::time::{Duration, Instant};
 use crate::core::touch;
-use crate::core::widget;
 use crate::core::widget::operation::{self, Operation};
 use crate::core::widget::tree::{self, Tree};
+use crate::core::widget::Id;
 use crate::core::window;
 use crate::core::{
     Background, Border, Color, Element, Layout, Length, Padding, Pixels, Point,
@@ -238,6 +237,7 @@ where
             horizontal_alignment: alignment::Horizontal::Left,
             vertical_alignment: alignment::Vertical::Center,
             shaping: text::Shaping::Advanced,
+            wrap: text::Wrap::default(),
         };
 
         state.placeholder.update(placeholder_text);
@@ -262,6 +262,7 @@ where
                 horizontal_alignment: alignment::Horizontal::Center,
                 vertical_alignment: alignment::Vertical::Center,
                 shaping: text::Shaping::Advanced,
+                wrap: text::Wrap::default(),
             };
 
             state.icon.update(icon_text);
@@ -507,7 +508,7 @@ where
         tree::State::new(State::<Renderer::Paragraph>::new())
     }
 
-    fn diff(&self, tree: &mut Tree) {
+    fn diff(&mut self, tree: &mut Tree) {
         let state = tree.state.downcast_mut::<State<Renderer::Paragraph>>();
 
         // Unfocus text input if it becomes disabled
@@ -540,12 +541,12 @@ where
         tree: &mut Tree,
         _layout: Layout<'_>,
         _renderer: &Renderer,
-        operation: &mut dyn Operation<Message>,
+        operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
     ) {
         let state = tree.state.downcast_mut::<State<Renderer::Paragraph>>();
 
-        operation.focusable(state, self.id.as_ref().map(|id| &id.0));
-        operation.text_input(state, self.id.as_ref().map(|id| &id.0));
+        operation.focusable(state, self.id.as_ref());
+        operation.text_input(state, self.id.as_ref());
     }
 
     fn on_event(
@@ -1116,45 +1117,21 @@ pub enum Side {
     Right,
 }
 
-/// The identifier of a [`TextInput`].
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Id(widget::Id);
-
-impl Id {
-    /// Creates a custom [`Id`].
-    pub fn new(id: impl Into<std::borrow::Cow<'static, str>>) -> Self {
-        Self(widget::Id::new(id))
-    }
-
-    /// Creates a unique [`Id`].
-    ///
-    /// This function produces a different [`Id`] every time it is called.
-    pub fn unique() -> Self {
-        Self(widget::Id::unique())
-    }
-}
-
-impl From<Id> for widget::Id {
-    fn from(id: Id) -> Self {
-        id.0
-    }
-}
-
 /// Produces a [`Command`] that focuses the [`TextInput`] with the given [`Id`].
 pub fn focus<Message: 'static>(id: Id) -> Command<Message> {
-    Command::widget(operation::focusable::focus(id.0))
+    Command::widget(operation::focusable::focus(id))
 }
 
 /// Produces a [`Command`] that moves the cursor of the [`TextInput`] with the given [`Id`] to the
 /// end.
 pub fn move_cursor_to_end<Message: 'static>(id: Id) -> Command<Message> {
-    Command::widget(operation::text_input::move_cursor_to_end(id.0))
+    Command::widget(operation::text_input::move_cursor_to_end(id))
 }
 
 /// Produces a [`Command`] that moves the cursor of the [`TextInput`] with the given [`Id`] to the
 /// front.
 pub fn move_cursor_to_front<Message: 'static>(id: Id) -> Command<Message> {
-    Command::widget(operation::text_input::move_cursor_to_front(id.0))
+    Command::widget(operation::text_input::move_cursor_to_front(id))
 }
 
 /// Produces a [`Command`] that moves the cursor of the [`TextInput`] with the given [`Id`] to the
@@ -1163,12 +1140,12 @@ pub fn move_cursor_to<Message: 'static>(
     id: Id,
     position: usize,
 ) -> Command<Message> {
-    Command::widget(operation::text_input::move_cursor_to(id.0, position))
+    Command::widget(operation::text_input::move_cursor_to(id, position))
 }
 
 /// Produces a [`Command`] that selects all the content of the [`TextInput`] with the given [`Id`].
 pub fn select_all<Message: 'static>(id: Id) -> Command<Message> {
-    Command::widget(operation::text_input::select_all(id.0))
+    Command::widget(operation::text_input::select_all(id))
 }
 
 /// The state of a [`TextInput`].
@@ -1391,6 +1368,7 @@ fn replace_paragraph<Renderer>(
         horizontal_alignment: alignment::Horizontal::Left,
         vertical_alignment: alignment::Vertical::Top,
         shaping: text::Shaping::Advanced,
+        wrap: text::Wrap::default(),
     });
 }
 
