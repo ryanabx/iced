@@ -7,7 +7,8 @@ publish = false
 
 [dependencies]
 iced.workspace = true
-iced.features = ["async-std", "debug"]
+iced_core.workspace = true
+iced.features = ["async-std", "debug", "winit", "a11y", "tiny-skia"]
 
 once_cell.workspace = true
 serde = { version = "1.0", features = ["derive"] }
@@ -29,6 +30,14 @@ wasm-timer.workspace = true
 
 [package.metadata.deb]
 assets = [
-    ["target/release-opt/todos", "usr/bin/iced-todos", "755"],
-    ["iced-todos.desktop", "usr/share/applications/", "644"],
+    [
+        "target/release-opt/todos",
+        "usr/bin/iced-todos",
+        "755",
+    ],
+    [
+        "iced-todos.desktop",
+        "usr/share/applications/",
+        "644",
+    ],
 ]

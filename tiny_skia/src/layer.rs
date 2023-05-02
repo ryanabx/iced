@@ -121,11 +121,13 @@ impl Layer {
         filter_method: image::FilterMethod,
         bounds: Rectangle,
         transformation: Transformation,
+        border_radius: [f32; 4],
     ) {
         let image = Image::Raster {
             handle,
             filter_method,
             bounds: bounds * transformation,
+            border_radius: border_radius,
         };
 
         self.images.push(image);
@@ -137,11 +139,13 @@ impl Layer {
         color: Option<Color>,
         bounds: Rectangle,
         transformation: Transformation,
+        border_radius: [f32; 4],
     ) {
         let svg = Image::Vector {
             handle,
             color,
             bounds: bounds * transformation,
+            border_radius: border_radius,
         };
 
         self.images.push(svg);
