@@ -6,6 +6,7 @@ use crate::core::widget::operation::{self, Operation};
 use crate::core::{Clipboard, Size};
 use crate::user_interface::{self, UserInterface};
 use crate::{Debug, Program, Task};
+use iced_core::widget::OperationOutputWrapper;
 
 /// The execution state of a multi-window [`Program`]. It leverages caching, event
 /// processing, and rendering primitive storage.
@@ -205,7 +206,7 @@ where
     pub fn operate(
         &mut self,
         renderer: &mut P::Renderer,
-        operations: impl Iterator<Item = Box<dyn Operation<()>>>,
+        operations: impl Iterator<Item = Box<dyn Operation<OperationOutputWrapper<()>>>>,
         bounds: Size,
         debug: &mut Debug,
     ) {
@@ -227,10 +228,11 @@ where
 
                 match operation.finish() {
                     operation::Outcome::None => {}
-                    operation::Outcome::Some(()) => {}
+                    operation::Outcome::Some(OperationOutputWrapper::Message(())) => {}
                     operation::Outcome::Chain(next) => {
                         current_operation = Some(next);
                     }
+                    _ => {}
                 };
             }
         }

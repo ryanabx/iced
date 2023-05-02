@@ -10,6 +10,8 @@
 )]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 pub mod clipboard;
+pub mod command;
+pub mod dnd;
 pub mod font;
 pub mod keyboard;
 pub mod overlay;
@@ -59,6 +61,9 @@ pub enum Action<T> {
         channel: oneshot::Sender<Result<(), font::Error>>,
     },
 
+    /// Run a Dnd action.
+    Dnd(crate::dnd::DndAction<T>),
+
     /// Run a widget operation.
     Widget(Box<dyn widget::Operation<()> + Send>),
 
@@ -70,6 +75,9 @@ pub enum Action<T> {
 
     /// Run a system action.
     System(system::Action),
+
+    /// Run a platform specific action
+    PlatformSpecific(crate::command::platform_specific::Action<T>),
 }
 
 impl<T> Action<T> {
@@ -88,6 +96,8 @@ impl<T> Action<T> {
             Action::Clipboard(action) => Err(Action::Clipboard(action)),
             Action::Window(action) => Err(Action::Window(action)),
             Action::System(action) => Err(Action::System(action)),
+            Action::Dnd(action) => Err(Action::Dnd(action)),
+            Action::PlatformSpecific(action) => Err(Action::PlatformSpecific(action)),
         }
     }
 }
@@ -110,6 +120,8 @@ where
             }
             Action::Window(_) => write!(f, "Action::Window"),
             Action::System(action) => write!(f, "Action::System({action:?})"),
+            Action::Dnd(action) => write!(f, "Action::Dnd({action:?})"),
+            Action::PlatformSpecific(action) => write!(f, "Action::PlatformSpecific({action:?})"),
         }
     }
 }

@@ -1,4 +1,6 @@
 use crate::container;
+use iced_renderer::core::widget::OperationOutputWrapper;
+
 use crate::core::event::{self, Event};
 use crate::core::layout;
 use crate::core::mouse;
@@ -82,8 +84,8 @@ where
         self.content.as_widget().children()
     }
 
-    fn diff(&self, tree: &mut Tree) {
-        self.content.as_widget().diff(tree);
+    fn diff(&mut self, tree: &mut Tree) {
+        self.content.as_widget_mut().diff(tree);
     }
 
     fn size(&self) -> Size<Length> {
@@ -104,7 +106,7 @@ where
         tree: &mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn Operation<()>,
+        operation: &mut dyn Operation<OperationOutputWrapper<()>>,
     ) {
         self.content
             .as_widget()
@@ -166,6 +168,8 @@ where
         let style = if let Some(text_color) = self.text_color {
             renderer::Style {
                 text_color: text_color(&theme),
+                icon_color: style.icon_color, // TODO(POP): Is this correct?
+                scale_factor: style.scale_factor, // TODO(POP): Is this correct?
             }
         } else {
             *style
@@ -236,7 +240,7 @@ where
                 &mut self,
                 layout: Layout<'_>,
                 renderer: &Renderer,
-                operation: &mut dyn Operation<()>,
+                operation: &mut dyn Operation<OperationOutputWrapper<()>>,
             ) {
                 self.content.operate(layout, renderer, operation);
             }

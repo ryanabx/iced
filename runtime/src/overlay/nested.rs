@@ -1,3 +1,5 @@
+use iced_core::widget::OperationOutputWrapper;
+
 use crate::core::event;
 use crate::core::layout;
 use crate::core::mouse;
@@ -131,13 +133,13 @@ where
         &mut self,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn widget::Operation<()>,
+        operation: &mut dyn widget::Operation<OperationOutputWrapper<()>>,
     ) {
         fn recurse<Message, Theme, Renderer>(
             element: &mut overlay::Element<'_, Message, Theme, Renderer>,
             layout: Layout<'_>,
             renderer: &Renderer,
-            operation: &mut dyn widget::Operation<()>,
+            operation: &mut dyn widget::Operation<OperationOutputWrapper<()>>,
         ) where
             Renderer: renderer::Renderer,
         {

@@ -1,15 +1,14 @@
 //! Display fields that can be filled with text.
 //!
 //! A [`TextInput`] has some local [`State`].
-mod editor;
-mod value;
+pub use super::cursor::Cursor;
+pub use super::value::Value;
 
-pub mod cursor;
+use super::cursor;
 
-pub use cursor::Cursor;
-pub use value::Value;
+use super::editor::Editor;
 
-use editor::Editor;
+use iced_renderer::core::widget::OperationOutputWrapper;
 
 use crate::core::alignment;
 use crate::core::clipboard::{self, Clipboard};
@@ -22,9 +21,9 @@ use crate::core::renderer;
 use crate::core::text::{self, Paragraph as _, Text};
 use crate::core::time::{Duration, Instant};
 use crate::core::touch;
-use crate::core::widget;
 use crate::core::widget::operation::{self, Operation};
 use crate::core::widget::tree::{self, Tree};
+use crate::core::widget::Id;
 use crate::core::window;
 use crate::core::{
     Background, Border, Color, Element, Layout, Length, Padding, Pixels, Point,
@@ -238,6 +237,7 @@ where
             horizontal_alignment: alignment::Horizontal::Left,
             vertical_alignment: alignment::Vertical::Center,
             shaping: text::Shaping::Advanced,
+            wrap: text::Wrap::default(),
         };
 
         state.placeholder.update(placeholder_text);
@@ -262,6 +262,7 @@ where
                 horizontal_alignment: alignment::Horizontal::Center,
                 vertical_alignment: alignment::Vertical::Center,
                 shaping: text::Shaping::Advanced,
+                wrap: text::Wrap::default(),
             };
 
             state.icon.update(icon_text);
@@ -507,7 +508,7 @@ where
         tree::State::new(State::<Renderer::Paragraph>::new())
     }
 
-    fn diff(&self, tree: &mut Tree) {
+    fn diff(&mut self, tree: &mut Tree) {
         let state = tree.state.downcast_mut::<State<Renderer::Paragraph>>();
 
         // Unfocus text input if it becomes disabled
@@ -540,12 +541,12 @@ where
         tree: &mut Tree,
         _layout: Layout<'_>,
         _renderer: &Renderer,
-        operation: &mut dyn Operation<()>,
+        operation: &mut dyn Operation<OperationOutputWrapper<()>>,
     ) {
         let state = tree.state.downcast_mut::<State<Renderer::Paragraph>>();
 
-        operation.focusable(state, self.id.as_ref().map(|id| &id.0));
-        operation.text_input(state, self.id.as_ref().map(|id| &id.0));
+        operation.focusable(state, self.id.as_ref());
+        operation.text_input(state, self.id.as_ref());
     }
 
     fn on_event(
@@ -1394,6 +1395,7 @@ fn replace_paragraph<Renderer>(
         horizontal_alignment: alignment::Horizontal::Left,
         vertical_alignment: alignment::Vertical::Top,
         shaping: text::Shaping::Advanced,
+        wrap: text::Wrap::default(),
     });
 }
 

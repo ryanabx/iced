@@ -1,7 +1,24 @@
 //! Create interactive, native cross-platform applications.
+mod drag_resize;
 mod state;
 
+use crate::core::clipboard::DndSource;
+use crate::core::Clipboard as CoreClipboard;
+use crate::core::Length;
+use dnd::DndAction;
+use dnd::DndEvent;
+use dnd::DndSurface;
+use dnd::Icon;
+use iced_futures::futures::StreamExt;
+#[cfg(feature = "a11y")]
+use iced_graphics::core::widget::operation::focusable::focus;
+use iced_graphics::core::widget::operation::OperationWrapper;
+use iced_graphics::core::widget::Operation;
+use iced_graphics::Viewport;
+use iced_runtime::futures::futures::FutureExt;
 pub use state::State;
+use window_clipboard::mime;
+use window_clipboard::mime::ClipboardStoreData;
 
 use crate::conversion;
 use crate::core;
@@ -21,13 +38,83 @@ use crate::runtime::program::Program;
 use crate::runtime::user_interface::{self, UserInterface};
 use crate::runtime::{Action, Debug, Task};
 use crate::{Clipboard, Error, Proxy, Settings};
-
 use futures::channel::mpsc;
 use futures::channel::oneshot;
 
+use std::any::Any;
 use std::borrow::Cow;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
+
+#[cfg(feature = "trace")]
+pub use profiler::Profiler;
+#[cfg(feature = "trace")]
+use tracing::{info_span, instrument::Instrument};
+
+/// Wrapper aroun application Messages to allow for more UserEvent variants
+pub enum UserEventWrapper<Message> {
+    /// Application Message
+    Message(Message),
+    #[cfg(feature = "a11y")]
+    /// A11y Action Request
+    A11y(iced_accessibility::accesskit_winit::ActionRequestEvent),
+    #[cfg(feature = "a11y")]
+    /// A11y was enabled
+    A11yEnabled,
+    /// CLipboard Message
+    StartDnd {
+        /// internal dnd
+        internal: bool,
+        /// the surface the dnd is started from
+        source_surface: Option<DndSource>,
+        /// the icon if any
+        /// This is actually an Element
+        icon_surface: Option<Box<dyn Any>>,
+        /// the content of the dnd
+        content: Box<dyn mime::AsMimeTypes + Send + 'static>,
+        /// the actions of the dnd
+        actions: DndAction,
+    },
+    /// Dnd Event
+    Dnd(DndEvent<DndSurface>),
+}
+
+unsafe impl<M> Send for UserEventWrapper<M> {}
+
+impl<M: std::fmt::Debug> std::fmt::Debug for UserEventWrapper<M> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UserEventWrapper::Message(m) => write!(f, "Message({:?})", m),
+            #[cfg(feature = "a11y")]
+            UserEventWrapper::A11y(a) => write!(f, "A11y({:?})", a),
+            #[cfg(feature = "a11y")]
+            UserEventWrapper::A11yEnabled => write!(f, "A11yEnabled"),
+            UserEventWrapper::StartDnd {
+                internal,
+                source_surface: _,
+                icon_surface,
+                content: _,
+                actions,
+            } => write!(
+                f,
+                "StartDnd {{ internal: {:?}, icon_surface: {}, actions: {:?} }}",
+                internal, icon_surface.is_some(), actions
+            ),
+            UserEventWrapper::Dnd(_) => write!(f, "Dnd"),
+        }
+    }
+}
+
+#[cfg(feature = "a11y")]
+impl<Message> From<iced_accessibility::accesskit_winit::ActionRequestEvent>
+    for UserEventWrapper<Message>
+{
+    fn from(
+        action_request: iced_accessibility::accesskit_winit::ActionRequestEvent,
+    ) -> Self {
+        UserEventWrapper::A11y(action_request)
+    }
+}
 
 /// An interactive, native cross-platform application.
 ///
@@ -104,6 +191,9 @@ pub struct Appearance {
     /// The background [`Color`] of the application.
     pub background_color: Color,
 
+    /// The default icon [`Color`] of the application.
+    pub icon_color: Color,
+
     /// The default text [`Color`] of the application.
     pub text_color: Color,
 }
@@ -125,6 +215,7 @@ pub fn default(theme: &Theme) -> Appearance {
     let palette = theme.extended_palette();
 
     Appearance {
+        icon_color: palette.background.strong.color, // TODO(POP): This field wasn't populated. What should this be?
         background_color: palette.background.base.color,
         text_color: palette.background.base.text,
     }
@@ -149,6 +240,9 @@ where
     let mut debug = Debug::new();
     debug.startup_started();
 
+    let resize_border = settings.window.resize_border;
+    #[cfg(feature = "trace")]
+    let _ = info_span!("Application", "RUN").entered();
     let event_loop = EventLoop::with_user_event()
         .build()
         .expect("Create event loop");
@@ -188,6 +282,7 @@ where
         event_receiver,
         control_sender,
         settings.fonts,
+        resize_border,
     ));
 
     let context = task::Context::from_waker(task::noop_waker_ref());
@@ -492,13 +587,14 @@ async fn run_instance<A, E, C>(
     >,
     mut control_sender: mpsc::UnboundedSender<winit::event_loop::ControlFlow>,
     fonts: Vec<Cow<'static, [u8]>>,
+    resize_border: u32,
 ) where
     A: Application + 'static,
     E: Executor + 'static,
     C: Compositor<Renderer = A::Renderer> + 'static,
     A::Theme: DefaultStyle,
+    A::Message: Send + 'static,
 {
-    use futures::stream::StreamExt;
     use winit::event;
     use winit::event_loop::ControlFlow;
 
@@ -547,11 +643,53 @@ async fn run_instance<A, E, C>(
         &mut debug,
     ));
 
+    let mut prev_dnd_rectangles_count = 0;
+
+    // Creates closure for handling the window drag resize state with winit.
+    let mut drag_resize_window_func = drag_resize::event_func(
+        &window,
+        resize_border as f64 * window.scale_factor(),
+    );
+
     let mut mouse_interaction = mouse::Interaction::default();
     let mut events = Vec::new();
     let mut messages = Vec::new();
     let mut user_events = 0;
     let mut redraw_pending = false;
+    #[cfg(feature = "a11y")]
+    let mut commands: Vec<Command<A::Message>> = Vec::new();
+
+    #[cfg(feature = "a11y")]
+    let (window_a11y_id, adapter, mut a11y_enabled) = {
+        let node_id = core::id::window_node_id();
+
+        use iced_accessibility::accesskit::{
+            NodeBuilder, NodeId, Role, Tree, TreeUpdate,
+        };
+        use iced_accessibility::accesskit_winit::Adapter;
+        let title = state.title().to_string();
+        let mut proxy_clone = proxy.clone();
+        (
+            node_id,
+            Adapter::new(
+                window.as_ref(),
+                move || {
+                    let _ = proxy_clone.send(UserEventWrapper::A11yEnabled);
+                    let mut node = NodeBuilder::new(Role::Window);
+                    node.set_name(title.clone());
+                    let node = node.build(&mut iced_accessibility::accesskit::NodeClassSet::lock_global());
+                    let root = NodeId(node_id);
+                    TreeUpdate {
+                        nodes: vec![(root, node)],
+                        tree: Some(Tree::new(root)),
+                        focus: root,
+                    }
+                },
+                proxy.raw.clone(),
+            ),
+            false,
+        )
+    };
 
     debug.startup_finished();
 
@@ -665,19 +803,102 @@ async fn run_instance<A, E, C>(
                     &mut renderer,
                     state.theme(),
                     &renderer::Style {
+                        icon_color: state.icon_color(),
                         text_color: state.text_color(),
+                        scale_factor: state.scale_factor(),
                     },
                     state.cursor(),
                 );
-                redraw_pending = false;
+
                 debug.draw_finished();
 
                 if new_mouse_interaction != mouse_interaction {
-                    window.set_cursor(conversion::mouse_interaction(
+                    window.set_cursor_icon(conversion::mouse_interaction(
                         new_mouse_interaction,
                     ));
 
                     mouse_interaction = new_mouse_interaction;
+                }
+
+                redraw_pending = false;
+
+                let physical_size = state.physical_size();
+
+                if physical_size.width == 0 || physical_size.height == 0 {
+                    continue;
+                }
+
+                #[cfg(feature = "a11y")]
+                if a11y_enabled {
+                    use iced_accessibility::{
+                        accesskit::{
+                            NodeBuilder, NodeId, Role, Tree, TreeUpdate,
+                        },
+                        A11yId, A11yNode, A11yTree,
+                    };
+                    // TODO send a11y tree
+                    let child_tree = user_interface.a11y_nodes(state.cursor());
+                    let mut root = NodeBuilder::new(Role::Window);
+                    root.set_name(state.title());
+
+                    let window_tree = A11yTree::node_with_child_tree(
+                        A11yNode::new(root, window_a11y_id),
+                        child_tree,
+                    );
+                    let tree = Tree::new(NodeId(window_a11y_id));
+                    let mut current_operation =
+                        Some(Box::new(OperationWrapper::Id(Box::new(
+                            operation::focusable::find_focused(),
+                        ))));
+
+                    let mut focus = None;
+                    while let Some(mut operation) = current_operation.take() {
+                        user_interface.operate(&renderer, operation.as_mut());
+
+                        match operation.finish() {
+                            operation::Outcome::None => {}
+                            operation::Outcome::Some(message) => match message {
+                                operation::OperationOutputWrapper::Message(
+                                    _,
+                                ) => {
+                                    unimplemented!();
+                                }
+                                operation::OperationOutputWrapper::Id(id) => {
+                                    focus = Some(A11yId::from(id));
+                                }
+                            },
+                            operation::Outcome::Chain(next) => {
+                                current_operation = Some(Box::new(
+                                    OperationWrapper::Wrapper(next),
+                                ));
+                            }
+                        }
+                    }
+
+                    log::debug!(
+                        "focus: {:?}\ntree root: {:?}\n children: {:?}",
+                        &focus,
+                        window_tree
+                            .root()
+                            .iter()
+                            .map(|n| (n.node().role(), n.id()))
+                            .collect::<Vec<_>>(),
+                        window_tree
+                            .children()
+                            .iter()
+                            .map(|n| (n.node().role(), n.id()))
+                            .collect::<Vec<_>>()
+                    );
+                    // TODO maybe optimize this?
+                    let focus = focus
+                        .filter(|f_id| window_tree.contains(f_id))
+                        .map(|id| id.into())
+                        .unwrap_or_else(|| tree.root);
+                    adapter.update_if_active(|| TreeUpdate {
+                        nodes: window_tree.into(),
+                        tree: Some(tree),
+                        focus,
+                    });
                 }
 
                 debug.render_started();
@@ -712,6 +933,13 @@ async fn run_instance<A, E, C>(
                 event: window_event,
                 ..
             } => {
+                // Initiates a drag resize window state when found.
+                if let Some(func) = drag_resize_window_func.as_mut() {
+                    if func(&window, &window_event) {
+                        continue;
+                    }
+                }
+
                 if requests_exit(&window_event, state.modifiers())
                     && exit_on_close_request
                 {
@@ -782,6 +1010,22 @@ async fn run_instance<A, E, C>(
                         &mut debug,
                     ));
 
+                    let dnd_rectangles = user_interface
+                        .dnd_rectangles(prev_dnd_rectangles_count, &renderer);
+                    let new_dnd_rectangles_count =
+                        dnd_rectangles.as_ref().len();
+
+                    if new_dnd_rectangles_count > 0
+                        || prev_dnd_rectangles_count > 0
+                    {
+                        clipboard.register_dnd_destination(
+                            DndSurface(Arc::new(Box::new(window.clone()))),
+                            dnd_rectangles.into_rectangles(),
+                        );
+                    }
+
+                    prev_dnd_rectangles_count = new_dnd_rectangles_count;
+
                     if should_exit {
                         break;
                     }
@@ -850,6 +1094,16 @@ where
     debug.layout_finished();
 
     user_interface
+}
+
+/// subscription mapper helper
+pub fn subscription_map<A, E>(e: A::Message) -> UserEventWrapper<A::Message>
+where
+    A: Application,
+    E: Executor,
+    A::Theme: DefaultStyle,
+{
+    UserEventWrapper::Message(e)
 }
 
 /// Updates an [`Application`] by feeding it the provided messages, spawning any

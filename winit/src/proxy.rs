@@ -1,8 +1,13 @@
-use crate::futures::futures::{
-    channel::mpsc,
-    select,
-    task::{Context, Poll},
-    Future, Sink, StreamExt,
+use dnd::{DndEvent, DndSurface};
+
+use crate::{
+    application::UserEventWrapper,
+    futures::futures::{
+        channel::mpsc,
+        select,
+        task::{Context, Poll},
+        Future, Sink, StreamExt,
+    },
 };
 use crate::runtime::Action;
 use std::pin::Pin;
@@ -129,5 +134,21 @@ impl<T: 'static> Sink<Action<T>> for Proxy<T> {
     ) -> Poll<Result<(), Self::Error>> {
         self.sender.disconnect();
         Poll::Ready(Ok(()))
+    }
+}
+
+impl<M> dnd::Sender<DndSurface> for Proxy<UserEventWrapper<M>> {
+    fn send(
+        &self,
+        event: DndEvent<DndSurface>,
+    ) -> Result<(), std::sync::mpsc::SendError<DndEvent<DndSurface>>> {
+        self.raw
+            .send_event(UserEventWrapper::Dnd(event))
+            .map_err(|_err| {
+                std::sync::mpsc::SendError(DndEvent::Offer(
+                    None,
+                    dnd::OfferEvent::Leave,
+                ))
+            })
     }
 }
