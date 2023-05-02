@@ -11,6 +11,7 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 pub mod clipboard;
 pub mod command;
+pub mod dnd;
 pub mod font;
 pub mod keyboard;
 pub mod overlay;

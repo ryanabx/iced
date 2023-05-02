@@ -1,7 +1,24 @@
 //! Create interactive, native cross-platform applications.
+mod drag_resize;
 mod state;
 
+use crate::core::clipboard::DndSource;
+use crate::core::Clipboard as CoreClipboard;
+use crate::core::Length;
+use dnd::DndAction;
+use dnd::DndEvent;
+use dnd::DndSurface;
+use dnd::Icon;
+use iced_futures::futures::StreamExt;
+#[cfg(feature = "a11y")]
+use iced_graphics::core::widget::operation::focusable::focus;
+use iced_graphics::core::widget::operation::OperationWrapper;
+use iced_graphics::core::widget::Operation;
+use iced_graphics::Viewport;
+use iced_runtime::futures::futures::FutureExt;
 pub use state::State;
+use window_clipboard::mime;
+use window_clipboard::mime::ClipboardStoreData;
 
 use crate::conversion;
 use crate::core;
@@ -20,13 +37,83 @@ use crate::runtime::program::Program;
 use crate::runtime::user_interface::{self, UserInterface};
 use crate::runtime::{Command, Debug};
 use crate::{Clipboard, Error, Proxy, Settings};
-
 use futures::channel::mpsc;
 use futures::channel::oneshot;
 
+use std::any::Any;
 use std::borrow::Cow;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
+
+#[cfg(feature = "trace")]
+pub use profiler::Profiler;
+#[cfg(feature = "trace")]
+use tracing::{info_span, instrument::Instrument};
+
+/// Wrapper aroun application Messages to allow for more UserEvent variants
+pub enum UserEventWrapper<Message> {
+    /// Application Message
+    Message(Message),
+    #[cfg(feature = "a11y")]
+    /// A11y Action Request
+    A11y(iced_accessibility::accesskit_winit::ActionRequestEvent),
+    #[cfg(feature = "a11y")]
+    /// A11y was enabled
+    A11yEnabled,
+    /// CLipboard Message
+    StartDnd {
+        /// internal dnd
+        internal: bool,
+        /// the surface the dnd is started from
+        source_surface: Option<DndSource>,
+        /// the icon if any
+        /// This is actually an Element
+        icon_surface: Option<Box<dyn Any>>,
+        /// the content of the dnd
+        content: Box<dyn mime::AsMimeTypes + Send + 'static>,
+        /// the actions of the dnd
+        actions: DndAction,
+    },
+    /// Dnd Event
+    Dnd(DndEvent<DndSurface>),
+}
+
+unsafe impl<M> Send for UserEventWrapper<M> {}
+
+impl<M: std::fmt::Debug> std::fmt::Debug for UserEventWrapper<M> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UserEventWrapper::Message(m) => write!(f, "Message({:?})", m),
+            #[cfg(feature = "a11y")]
+            UserEventWrapper::A11y(a) => write!(f, "A11y({:?})", a),
+            #[cfg(feature = "a11y")]
+            UserEventWrapper::A11yEnabled => write!(f, "A11yEnabled"),
+            UserEventWrapper::StartDnd {
+                internal,
+                source_surface: _,
+                icon_surface,
+                content: _,
+                actions,
+            } => write!(
+                f,
+                "StartDnd {{ internal: {:?}, icon_surface: {}, actions: {:?} }}",
+                internal, icon_surface.is_some(), actions
+            ),
+            UserEventWrapper::Dnd(_) => write!(f, "Dnd"),
+        }
+    }
+}
+
+#[cfg(feature = "a11y")]
+impl<Message> From<iced_accessibility::accesskit_winit::ActionRequestEvent>
+    for UserEventWrapper<Message>
+{
+    fn from(
+        action_request: iced_accessibility::accesskit_winit::ActionRequestEvent,
+    ) -> Self {
+        UserEventWrapper::A11y(action_request)
+    }
+}
 
 /// An interactive, native cross-platform application.
 ///
@@ -103,6 +190,9 @@ pub struct Appearance {
     /// The background [`Color`] of the application.
     pub background_color: Color,
 
+    /// The default icon [`Color`] of the application.
+    pub icon_color: Color,
+
     /// The default text [`Color`] of the application.
     pub text_color: Color,
 }
@@ -124,6 +214,7 @@ pub fn default(theme: &Theme) -> Appearance {
     let palette = theme.extended_palette();
 
     Appearance {
+        icon_color: palette.background.strong.color, // TODO(POP): This field wasn't populated. What should this be?
         background_color: palette.background.base.color,
         text_color: palette.background.base.text,
     }
@@ -148,6 +239,9 @@ where
     let mut debug = Debug::new();
     debug.startup_started();
 
+    let resize_border = settings.window.resize_border;
+    #[cfg(feature = "trace")]
+    let _ = info_span!("Application", "RUN").entered();
     let event_loop = EventLoop::with_user_event()
         .build()
         .expect("Create event loop");
@@ -184,6 +278,7 @@ where
         control_sender,
         init_command,
         settings.fonts,
+        resize_border,
     ));
 
     let context = task::Context::from_waker(task::noop_waker_ref());
@@ -479,23 +574,28 @@ struct Boot<C> {
 
 async fn run_instance<A, E, C>(
     mut application: A,
-    mut runtime: Runtime<E, Proxy<A::Message>, A::Message>,
-    mut proxy: Proxy<A::Message>,
+    mut runtime: Runtime<
+        E,
+        Proxy<UserEventWrapper<A::Message>>,
+        UserEventWrapper<A::Message>,
+    >,
+    mut proxy: Proxy<UserEventWrapper<A::Message>>,
     mut debug: Debug,
     mut boot: oneshot::Receiver<Boot<C>>,
     mut event_receiver: mpsc::UnboundedReceiver<
-        winit::event::Event<A::Message>,
+        winit::event::Event<UserEventWrapper<A::Message>>,
     >,
     mut control_sender: mpsc::UnboundedSender<winit::event_loop::ControlFlow>,
     init_command: Command<A::Message>,
     fonts: Vec<Cow<'static, [u8]>>,
+    resize_border: u32,
 ) where
     A: Application + 'static,
     E: Executor + 'static,
     C: Compositor<Renderer = A::Renderer> + 'static,
     A::Theme: DefaultStyle,
+    A::Message: Send + 'static,
 {
-    use futures::stream::StreamExt;
     use winit::event;
     use winit::event_loop::ControlFlow;
 
@@ -516,7 +616,10 @@ async fn run_instance<A, E, C>(
     let mut viewport_version = state.viewport_version();
     let physical_size = state.physical_size();
 
-    let mut clipboard = Clipboard::connect(&window);
+    let mut clipboard = Clipboard::connect(
+        &window,
+        crate::proxy::Proxy::new(proxy.raw.clone()).0,
+    );
     let mut cache = user_interface::Cache::default();
     let mut surface = compositor.create_surface(
         window.clone(),
@@ -544,7 +647,12 @@ async fn run_instance<A, E, C>(
         &mut debug,
         &window,
     );
-    runtime.track(application.subscription().into_recipes());
+    runtime.track(
+        application
+            .subscription()
+            .map(subscription_map::<A, E>)
+            .into_recipes(),
+    );
 
     let mut user_interface = ManuallyDrop::new(build_user_interface(
         &application,
@@ -554,11 +662,53 @@ async fn run_instance<A, E, C>(
         &mut debug,
     ));
 
+    let mut prev_dnd_rectangles_count = 0;
+
+    // Creates closure for handling the window drag resize state with winit.
+    let mut drag_resize_window_func = drag_resize::event_func(
+        &window,
+        resize_border as f64 * window.scale_factor(),
+    );
+
     let mut mouse_interaction = mouse::Interaction::default();
     let mut events = Vec::new();
     let mut messages = Vec::new();
     let mut user_events = 0;
     let mut redraw_pending = false;
+    #[cfg(feature = "a11y")]
+    let mut commands: Vec<Command<A::Message>> = Vec::new();
+
+    #[cfg(feature = "a11y")]
+    let (window_a11y_id, adapter, mut a11y_enabled) = {
+        let node_id = core::id::window_node_id();
+
+        use iced_accessibility::accesskit::{
+            NodeBuilder, NodeId, Role, Tree, TreeUpdate,
+        };
+        use iced_accessibility::accesskit_winit::Adapter;
+        let title = state.title().to_string();
+        let mut proxy_clone = proxy.clone();
+        (
+            node_id,
+            Adapter::new(
+                window.as_ref(),
+                move || {
+                    let _ = proxy_clone.send(UserEventWrapper::A11yEnabled);
+                    let mut node = NodeBuilder::new(Role::Window);
+                    node.set_name(title.clone());
+                    let node = node.build(&mut iced_accessibility::accesskit::NodeClassSet::lock_global());
+                    let root = NodeId(node_id);
+                    TreeUpdate {
+                        nodes: vec![(root, node)],
+                        tree: Some(Tree::new(root)),
+                        focus: root,
+                    }
+                },
+                proxy.raw.clone(),
+            ),
+            false,
+        )
+    };
 
     debug.startup_finished();
 
@@ -583,7 +733,135 @@ async fn run_instance<A, E, C>(
                 ));
             }
             event::Event::UserEvent(message) => {
-                messages.push(message);
+                match message {
+                    UserEventWrapper::Message(m) => messages.push(m),
+                    #[cfg(feature = "a11y")]
+                    UserEventWrapper::A11y(request) => {
+                        match request.request.action {
+                            iced_accessibility::accesskit::Action::Focus => {
+                                commands.push(Command::widget(focus(
+                                    core::widget::Id::from(u128::from(
+                                        request.request.target.0,
+                                    )
+                                        as u64),
+                                )));
+                            }
+                            _ => {}
+                        }
+                        events.push(conversion::a11y(request.request));
+                    }
+                    #[cfg(feature = "a11y")]
+                    UserEventWrapper::A11yEnabled => a11y_enabled = true,
+                    UserEventWrapper::StartDnd {
+                        internal,
+                        source_surface: _, // not needed if there is only one window
+                        icon_surface,
+                        content,
+                        actions,
+                    } => {
+                        let mut renderer = compositor.create_renderer();
+                        let icon_surface = icon_surface
+                            .map(|i| {
+                                let i: Box<dyn Any> = i;
+                                i
+                            })
+                            .and_then(|i| {
+                                i.downcast::<Arc<(
+                                    core::Element<
+                                        'static,
+                                        A::Message,
+                                        A::Theme,
+                                        A::Renderer,
+                                    >,
+                                    core::widget::tree::State,
+                                )>>()
+                                .ok()
+                            })
+                            .map(|e| {
+                                let e = Arc::into_inner(*e).unwrap();
+                                let (mut e, widget_state) = e;
+                                let lim = core::layout::Limits::new(
+                                    Size::new(1., 1.),
+                                    Size::new(
+                                        state.viewport().physical_width()
+                                            as f32,
+                                        state.viewport().physical_height()
+                                            as f32,
+                                    ),
+                                );
+
+                                let mut tree = core::widget::Tree {
+                                    id: e.as_widget().id(),
+                                    tag: e.as_widget().tag(),
+                                    state: widget_state,
+                                    children: e.as_widget().children(),
+                                };
+
+                                let size = e
+                                    .as_widget()
+                                    .layout(&mut tree, &renderer, &lim);
+                                e.as_widget_mut().diff(&mut tree);
+
+                                let size = lim.resolve(
+                                    Length::Shrink,
+                                    Length::Shrink,
+                                    size.size(),
+                                );
+                                let mut surface = compositor.create_surface(
+                                    window.clone(),
+                                    size.width.ceil() as u32,
+                                    size.height.ceil() as u32,
+                                );
+                                let viewport = Viewport::with_logical_size(
+                                    size,
+                                    state.viewport().scale_factor(),
+                                );
+
+                                let mut ui = UserInterface::build(
+                                    e,
+                                    size,
+                                    user_interface::Cache::default(),
+                                    &mut renderer,
+                                );
+                                _ = ui.draw(
+                                    &mut renderer,
+                                    state.theme(),
+                                    &renderer::Style {
+                                        icon_color: state.icon_color(),
+                                        text_color: state.text_color(),
+                                        scale_factor: state.scale_factor(),
+                                    },
+                                    Default::default(),
+                                );
+                                let mut bytes = compositor.screenshot(
+                                    &mut renderer,
+                                    &mut surface,
+                                    &viewport,
+                                    core::Color::TRANSPARENT,
+                                    &debug.overlay(),
+                                );
+                                for pix in bytes.chunks_exact_mut(4) {
+                                    // rgba -> argb little endian
+                                    pix.swap(0, 2);
+                                }
+                                Icon::Buffer {
+                                    data: Arc::new(bytes),
+                                    width: viewport.physical_width(),
+                                    height: viewport.physical_height(),
+                                    transparent: true,
+                                }
+                            });
+
+                        clipboard.start_dnd_winit(
+                            internal,
+                            DndSurface(Arc::new(Box::new(window.clone()))),
+                            icon_surface,
+                            content,
+                            actions,
+                        );
+                    }
+                    UserEventWrapper::Dnd(e) => events.push(Event::Dnd(e)),
+                };
                 user_events += 1;
             }
             event::Event::WindowEvent {
@@ -661,19 +939,102 @@ async fn run_instance<A, E, C>(
                     &mut renderer,
                     state.theme(),
                     &renderer::Style {
+                        icon_color: state.icon_color(),
                         text_color: state.text_color(),
+                        scale_factor: state.scale_factor(),
                     },
                     state.cursor(),
                 );
-                redraw_pending = false;
+
                 debug.draw_finished();
 
                 if new_mouse_interaction != mouse_interaction {
-                    window.set_cursor(conversion::mouse_interaction(
+                    window.set_cursor_icon(conversion::mouse_interaction(
                         new_mouse_interaction,
                     ));
 
                     mouse_interaction = new_mouse_interaction;
+                }
+
+                redraw_pending = false;
+
+                let physical_size = state.physical_size();
+
+                if physical_size.width == 0 || physical_size.height == 0 {
+                    continue;
+                }
+
+                #[cfg(feature = "a11y")]
+                if a11y_enabled {
+                    use iced_accessibility::{
+                        accesskit::{
+                            NodeBuilder, NodeId, Role, Tree, TreeUpdate,
+                        },
+                        A11yId, A11yNode, A11yTree,
+                    };
+                    // TODO send a11y tree
+                    let child_tree = user_interface.a11y_nodes(state.cursor());
+                    let mut root = NodeBuilder::new(Role::Window);
+                    root.set_name(state.title());
+
+                    let window_tree = A11yTree::node_with_child_tree(
+                        A11yNode::new(root, window_a11y_id),
+                        child_tree,
+                    );
+                    let tree = Tree::new(NodeId(window_a11y_id));
+                    let mut current_operation =
+                        Some(Box::new(OperationWrapper::Id(Box::new(
+                            operation::focusable::find_focused(),
+                        ))));
+
+                    let mut focus = None;
+                    while let Some(mut operation) = current_operation.take() {
+                        user_interface.operate(&renderer, operation.as_mut());
+
+                        match operation.finish() {
+                            operation::Outcome::None => {}
+                            operation::Outcome::Some(message) => match message {
+                                operation::OperationOutputWrapper::Message(
+                                    _,
+                                ) => {
+                                    unimplemented!();
+                                }
+                                operation::OperationOutputWrapper::Id(id) => {
+                                    focus = Some(A11yId::from(id));
+                                }
+                            },
+                            operation::Outcome::Chain(next) => {
+                                current_operation = Some(Box::new(
+                                    OperationWrapper::Wrapper(next),
+                                ));
+                            }
+                        }
+                    }
+
+                    log::debug!(
+                        "focus: {:?}\ntree root: {:?}\n children: {:?}",
+                        &focus,
+                        window_tree
+                            .root()
+                            .iter()
+                            .map(|n| (n.node().role(), n.id()))
+                            .collect::<Vec<_>>(),
+                        window_tree
+                            .children()
+                            .iter()
+                            .map(|n| (n.node().role(), n.id()))
+                            .collect::<Vec<_>>()
+                    );
+                    // TODO maybe optimize this?
+                    let focus = focus
+                        .filter(|f_id| window_tree.contains(f_id))
+                        .map(|id| id.into())
+                        .unwrap_or_else(|| tree.root);
+                    adapter.update_if_active(|| TreeUpdate {
+                        nodes: window_tree.into(),
+                        tree: Some(tree),
+                        focus,
+                    });
                 }
 
                 debug.render_started();
@@ -708,6 +1069,13 @@ async fn run_instance<A, E, C>(
                 event: window_event,
                 ..
             } => {
+                // Initiates a drag resize window state when found.
+                if let Some(func) = drag_resize_window_func.as_mut() {
+                    if func(&window, &window_event) {
+                        continue;
+                    }
+                }
+
                 if requests_exit(&window_event, state.modifiers())
                     && exit_on_close_request
                 {
@@ -781,6 +1149,22 @@ async fn run_instance<A, E, C>(
                         &mut debug,
                     ));
 
+                    let dnd_rectangles = user_interface
+                        .dnd_rectangles(prev_dnd_rectangles_count, &renderer);
+                    let new_dnd_rectangles_count =
+                        dnd_rectangles.as_ref().len();
+
+                    if new_dnd_rectangles_count > 0
+                        || prev_dnd_rectangles_count > 0
+                    {
+                        clipboard.register_dnd_destination(
+                            DndSurface(Arc::new(Box::new(window.clone()))),
+                            dnd_rectangles.into_rectangles(),
+                        );
+                    }
+
+                    prev_dnd_rectangles_count = new_dnd_rectangles_count;
+
                     if should_exit {
                         break;
                     }
@@ -851,19 +1235,33 @@ where
     user_interface
 }
 
+/// subscription mapper helper
+pub fn subscription_map<A, E>(e: A::Message) -> UserEventWrapper<A::Message>
+where
+    A: Application,
+    E: Executor,
+    A::Theme: DefaultStyle,
+{
+    UserEventWrapper::Message(e)
+}
+
 /// Updates an [`Application`] by feeding it the provided messages, spawning any
 /// resulting [`Command`], and tracking its [`Subscription`].
-pub fn update<A: Application, C, E: Executor>(
+pub fn update<A: Application + 'static, C, E: Executor + 'static>(
     application: &mut A,
     compositor: &mut C,
     surface: &mut C::Surface,
     cache: &mut user_interface::Cache,
     state: &mut State<A>,
     renderer: &mut A::Renderer,
-    runtime: &mut Runtime<E, Proxy<A::Message>, A::Message>,
-    clipboard: &mut Clipboard,
+    runtime: &mut Runtime<
+        E,
+        Proxy<UserEventWrapper<A::Message>>,
+        UserEventWrapper<A::Message>,
+    >,
+    clipboard: &mut Clipboard<A::Message>,
     should_exit: &mut bool,
-    proxy: &mut Proxy<A::Message>,
+    proxy: &mut Proxy<UserEventWrapper<A::Message>>,
     debug: &mut Debug,
     messages: &mut Vec<A::Message>,
     window: &winit::window::Window,
@@ -897,8 +1295,12 @@ pub fn update<A: Application, C, E: Executor>(
 
     state.synchronize(application, window);
 
-    let subscription = application.subscription();
-    runtime.track(subscription.into_recipes());
+    runtime.track(
+        application
+            .subscription()
+            .map(subscription_map::<A, E>)
+            .into_recipes(),
+    );
 }
 
 /// Runs the actions of a [`Command`].
@@ -910,10 +1312,14 @@ pub fn run_command<A, C, E>(
     state: &State<A>,
     renderer: &mut A::Renderer,
     command: Command<A::Message>,
-    runtime: &mut Runtime<E, Proxy<A::Message>, A::Message>,
-    clipboard: &mut Clipboard,
+    runtime: &mut Runtime<
+        E,
+        Proxy<UserEventWrapper<A::Message>>,
+        UserEventWrapper<A::Message>,
+    >,
+    clipboard: &mut Clipboard<A::Message>,
     should_exit: &mut bool,
-    proxy: &mut Proxy<A::Message>,
+    proxy: &mut Proxy<UserEventWrapper<A::Message>>,
     debug: &mut Debug,
     window: &winit::window::Window,
 ) where
@@ -929,19 +1335,29 @@ pub fn run_command<A, C, E>(
     for action in command.actions() {
         match action {
             command::Action::Future(future) => {
-                runtime.spawn(future);
+                runtime.spawn(Box::pin(future.map(UserEventWrapper::Message)));
             }
             command::Action::Stream(stream) => {
-                runtime.run(stream);
+                runtime.run(Box::pin(
+                    stream.boxed().map(UserEventWrapper::Message),
+                ));
             }
             command::Action::Clipboard(action) => match action {
                 clipboard::Action::Read(tag, kind) => {
                     let message = tag(clipboard.read(kind));
 
-                    proxy.send(message);
+                    proxy.send(UserEventWrapper::Message(message));
                 }
                 clipboard::Action::Write(contents, kind) => {
                     clipboard.write(kind, contents);
+                }
+                clipboard::Action::WriteData(contents, kind) => {
+                    clipboard.write_data(kind, ClipboardStoreData(contents))
+                }
+                clipboard::Action::ReadData(allowed, to_msg, kind) => {
+                    let contents = clipboard.read_data(kind, allowed);
+                    let message = to_msg(contents);
+                    _ = proxy.send(UserEventWrapper::Message(message));
                 }
             },
             command::Action::Window(action) => match action {
@@ -968,16 +1384,23 @@ pub fn run_command<A, C, E>(
                     let size =
                         window.inner_size().to_logical(window.scale_factor());
 
-                    proxy.send(callback(Size::new(size.width, size.height)));
+                    proxy.send(UserEventWrapper::Message(callback(Size::new(
+                        size.width,
+                        size.height,
+                    ))));
                 }
                 window::Action::FetchMaximized(_id, callback) => {
-                    proxy.send(callback(window.is_maximized()));
+                    proxy.send(UserEventWrapper::Message(callback(
+                        window.is_maximized(),
+                    )));
                 }
                 window::Action::Maximize(_id, maximized) => {
                     window.set_maximized(maximized);
                 }
                 window::Action::FetchMinimized(_id, callback) => {
-                    proxy.send(callback(window.is_minimized()));
+                    proxy.send(UserEventWrapper::Message(callback(
+                        window.is_minimized(),
+                    )));
                 }
                 window::Action::Minimize(_id, minimized) => {
                     window.set_minimized(minimized);
@@ -993,7 +1416,7 @@ pub fn run_command<A, C, E>(
                         })
                         .ok();
 
-                    proxy.send(callback(position));
+                    proxy.send(UserEventWrapper::Message(callback(position)));
                 }
                 window::Action::Move(_id, position) => {
                     window.set_outer_position(winit::dpi::LogicalPosition {
@@ -1018,7 +1441,7 @@ pub fn run_command<A, C, E>(
                         core::window::Mode::Hidden
                     };
 
-                    proxy.send(tag(mode));
+                    proxy.send(UserEventWrapper::Message(tag(mode)));
                 }
                 window::Action::ToggleMaximize(_id) => {
                     window.set_maximized(!window.is_maximized());
@@ -1046,13 +1469,15 @@ pub fn run_command<A, C, E>(
                     }
                 }
                 window::Action::FetchId(_id, tag) => {
-                    proxy.send(tag(window.id().into()));
+                    proxy.send(UserEventWrapper::Message(tag(window
+                        .id()
+                        .into())));
                 }
                 window::Action::RunWithHandle(_id, tag) => {
                     use window::raw_window_handle::HasWindowHandle;
 
                     if let Ok(handle) = window.window_handle() {
-                        proxy.send(tag(handle));
+                        proxy.send(UserEventWrapper::Message(tag(handle)));
                     }
                 }
 
@@ -1065,10 +1490,12 @@ pub fn run_command<A, C, E>(
                         &debug.overlay(),
                     );
 
-                    proxy.send(tag(window::Screenshot::new(
-                        bytes,
-                        state.physical_size(),
-                        state.viewport().scale_factor(),
+                    proxy.send(UserEventWrapper::Message(tag(
+                        window::Screenshot::new(
+                            bytes,
+                            state.physical_size(),
+                            state.viewport().scale_factor(),
+                        ),
                     )));
                 }
             },
@@ -1085,15 +1512,15 @@ pub fn run_command<A, C, E>(
 
                             let message = _tag(information);
 
-                            proxy.send(message);
+                            proxy.send(UserEventWrapper::Message(message));
                         });
                     }
                 }
             },
             command::Action::Widget(action) => {
                 let mut current_cache = std::mem::take(cache);
-                let mut current_operation = Some(action);
-
+                let mut current_operation =
+                    Some(Box::new(OperationWrapper::Message(action)));
                 let mut user_interface = build_user_interface(
                     application,
                     current_cache,
@@ -1108,10 +1535,20 @@ pub fn run_command<A, C, E>(
                     match operation.finish() {
                         operation::Outcome::None => {}
                         operation::Outcome::Some(message) => {
-                            proxy.send(message);
+                            match message {
+                                operation::OperationOutputWrapper::Message(
+                                    m,
+                                ) => {
+                                    proxy.send(UserEventWrapper::Message(m));
+                                }
+                                operation::OperationOutputWrapper::Id(_) => {
+                                    // TODO ASHLEY should not ever happen, should this panic!()?
+                                }
+                            }
                         }
                         operation::Outcome::Chain(next) => {
-                            current_operation = Some(next);
+                            current_operation =
+                                Some(Box::new(OperationWrapper::Wrapper(next)));
                         }
                     }
                 }
@@ -1123,11 +1560,44 @@ pub fn run_command<A, C, E>(
                 // TODO: Error handling (?)
                 compositor.load_font(bytes);
 
-                proxy.send(tagger(Ok(())));
+                proxy.send(UserEventWrapper::Message(tagger(Ok(()))));
             }
             command::Action::Custom(_) => {
                 log::warn!("Unsupported custom action in `iced_winit` shell");
             }
+            command::Action::PlatformSpecific(_) => todo!(),
+            command::Action::Dnd(a) => match a {
+                iced_runtime::dnd::DndAction::RegisterDndDestination {
+                    surface,
+                    rectangles,
+                } => {
+                    clipboard.register_dnd_destination(surface, rectangles);
+                }
+                iced_runtime::dnd::DndAction::StartDnd {
+                    internal,
+                    source_surface,
+                    icon_surface,
+                    content,
+                    actions,
+                } => clipboard.start_dnd(
+                    internal,
+                    source_surface,
+                    icon_surface,
+                    content,
+                    actions,
+                ),
+                iced_runtime::dnd::DndAction::EndDnd => {
+                    clipboard.end_dnd();
+                }
+                iced_runtime::dnd::DndAction::PeekDnd(m, to_msg) => {
+                    let data = clipboard.peek_dnd(m);
+                    let message = to_msg(data);
+                    proxy.send(UserEventWrapper::Message(message))
+                }
+                iced_runtime::dnd::DndAction::SetAction(a) => {
+                    clipboard.set_action(a);
+                }
+            },
         }
     }
 }

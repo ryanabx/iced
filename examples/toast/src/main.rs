@@ -167,7 +167,9 @@ mod toast {
     use iced::advanced::layout::{self, Layout};
     use iced::advanced::overlay;
     use iced::advanced::renderer;
-    use iced::advanced::widget::{self, Operation, Tree};
+    use iced::advanced::widget::{
+        self, Operation, OperationOutputWrapper, Tree,
+    };
     use iced::advanced::{Clipboard, Shell, Widget};
     use iced::event::{self, Event};
     use iced::mouse;
@@ -315,7 +317,7 @@ mod toast {
                 .collect()
         }
 
-        fn diff(&self, tree: &mut Tree) {
+        fn diff(&mut self, tree: &mut Tree) {
             let instants = tree.state.downcast_mut::<Vec<Option<Instant>>>();
 
             // Invalidating removed instants to None allows us to remove
@@ -336,8 +338,8 @@ mod toast {
             }
 
             tree.diff_children(
-                &std::iter::once(&self.content)
-                    .chain(self.toasts.iter())
+                &mut std::iter::once(&mut self.content)
+                    .chain(self.toasts.iter_mut())
                     .collect::<Vec<_>>(),
             );
         }
@@ -347,7 +349,7 @@ mod toast {
             state: &mut Tree,
             layout: Layout<'_>,
             renderer: &Renderer,
-            operation: &mut dyn Operation<Message>,
+            operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
         ) {
             operation.container(None, layout.bounds(), &mut |operation| {
                 self.content.as_widget().operate(
@@ -589,7 +591,7 @@ mod toast {
             &mut self,
             layout: Layout<'_>,
             renderer: &Renderer,
-            operation: &mut dyn widget::Operation<Message>,
+            operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
         ) {
             operation.container(None, layout.bounds(), &mut |operation| {
                 self.toasts
