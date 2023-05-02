@@ -4,6 +4,7 @@ mod scene;
 use controls::Controls;
 use scene::Scene;
 
+use iced_wgpu::core::window::Id;
 use iced_wgpu::graphics::Viewport;
 use iced_wgpu::{wgpu, Backend, Renderer, Settings};
 use iced_winit::conversion;
@@ -162,6 +163,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let mut state = program::State::new(
+        Id::MAIN,
         controls,
         viewport.logical_size(),
         &mut renderer,
