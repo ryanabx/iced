@@ -784,6 +784,7 @@ where
                         horizontal_alignment: alignment::Horizontal::Left,
                         vertical_alignment: alignment::Vertical::Top,
                         shaping: text::Shaping::Advanced,
+                        wrap: text::Wrap::None,
                     },
                     text_bounds.position(),
                     style.placeholder,

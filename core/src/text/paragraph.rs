@@ -95,6 +95,7 @@ impl<P: Paragraph> Plain<P> {
             horizontal_alignment: text.horizontal_alignment,
             vertical_alignment: text.vertical_alignment,
             shaping: text.shaping,
+            wrap: text.wrap,
         }) {
             Difference::None => {}
             Difference::Bounds => {

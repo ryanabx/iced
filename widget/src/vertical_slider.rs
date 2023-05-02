@@ -2,8 +2,10 @@
 use std::ops::RangeInclusive;
 
 pub use crate::slider::{
-    default, Catalog, Handle, HandleShape, Status, Style, StyleFn,
+    default, Catalog, Handle, HandleShape, RailBackground, Status, Style,
+    StyleFn,
 };
+use iced_renderer::core::{Degrees, Radians};
 
 use crate::core::border::{self, Border};
 use crate::core::event::{self, Event};
@@ -317,9 +319,15 @@ where
                         shell.publish(on_release);
                     }
                     state.is_dragging = false;
-
-                    return event::Status::Captured;
+                } else {
+                    if let Some(cursor_position) =
+                        cursor.position_over(layout.bounds())
+                    {
+                        let _ = locate(cursor_position).map(change);
+                        state.is_dragging = true;
+                    }
                 }
+                return event::Status::Captured;
             }
             Event::Mouse(mouse::Event::CursorMoved { .. })
             | Event::Touch(touch::Event::FingerMoved { .. }) => {
@@ -384,9 +392,10 @@ where
                     (radius * 2.0, radius * 2.0, radius.into())
                 }
                 HandleShape::Rectangle {
+                    height,
                     width,
                     border_radius,
-                } => (f32::from(width), bounds.width, border_radius),
+                } => (f32::from(width), f32::from(height), border_radius),
             };
 
         let value = self.value.into() as f32;
@@ -405,33 +414,63 @@ where
 
         let rail_x = bounds.x + bounds.width / 2.0;
 
-        renderer.fill_quad(
-            renderer::Quad {
-                bounds: Rectangle {
-                    x: rail_x - style.rail.width / 2.0,
-                    y: bounds.y,
-                    width: style.rail.width,
-                    height: offset + handle_width / 2.0,
-                },
-                border: border::rounded(style.rail.border_radius),
-                ..renderer::Quad::default()
-            },
-            style.rail.colors.1,
-        );
+        match style.rail.colors {
+            RailBackground::Pair(start, end) => {
+                renderer.fill_quad(
+                    renderer::Quad {
+                        bounds: Rectangle {
+                            x: rail_x - style.rail.width / 2.0,
+                            y: bounds.y,
+                            width: style.rail.width,
+                            height: offset + handle_width / 2.0,
+                        },
+                        border: Border::default()
+                            .rounded(style.rail.border_radius),
+                        ..renderer::Quad::default()
+                    },
+                    end,
+                );
 
-        renderer.fill_quad(
-            renderer::Quad {
-                bounds: Rectangle {
-                    x: rail_x - style.rail.width / 2.0,
-                    y: bounds.y + offset + handle_width / 2.0,
-                    width: style.rail.width,
-                    height: bounds.height - offset - handle_width / 2.0,
-                },
-                border: border::rounded(style.rail.border_radius),
-                ..renderer::Quad::default()
-            },
-            style.rail.colors.0,
-        );
+                renderer.fill_quad(
+                    renderer::Quad {
+                        bounds: Rectangle {
+                            x: rail_x - style.rail.width / 2.0,
+                            y: bounds.y + offset + handle_width / 2.0,
+                            width: style.rail.width,
+                            height: bounds.height - offset - handle_width / 2.0,
+                        },
+                        border: Border::default()
+                            .rounded(style.rail.border_radius),
+                        ..renderer::Quad::default()
+                    },
+                    start,
+                );
+            }
+            RailBackground::Gradient {
+                mut gradient,
+                auto_angle,
+            } => {
+                renderer.fill_quad(
+                    renderer::Quad {
+                        bounds: Rectangle {
+                            x: rail_x - style.rail.width / 2.0,
+                            y: bounds.y,
+                            width: style.rail.width,
+                            height: bounds.height - handle_width / 2.0,
+                        },
+                        border: Border::default()
+                            .rounded(style.rail.border_radius),
+                        ..renderer::Quad::default()
+                    },
+                    if auto_angle {
+                        gradient.angle = Radians::from(Degrees(180.0));
+                        gradient
+                    } else {
+                        gradient
+                    },
+                );
+            }
+        }
 
         renderer.fill_quad(
             renderer::Quad {

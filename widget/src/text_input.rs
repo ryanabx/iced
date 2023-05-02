@@ -251,6 +251,7 @@ where
             horizontal_alignment: alignment::Horizontal::Left,
             vertical_alignment: alignment::Vertical::Center,
             shaping: text::Shaping::Advanced,
+            wrap: text::Wrap::None,
         };
 
         state.placeholder.update(placeholder_text);
@@ -275,6 +276,7 @@ where
                 horizontal_alignment: alignment::Horizontal::Center,
                 vertical_alignment: alignment::Vertical::Center,
                 shaping: text::Shaping::Advanced,
+                wrap: text::Wrap::None,
             };
 
             state.icon.update(icon_text);
@@ -528,7 +530,7 @@ where
         tree::State::new(State::<Renderer::Paragraph>::new())
     }
 
-    fn diff(&self, tree: &mut Tree) {
+    fn diff(&mut self, tree: &mut Tree) {
         let state = tree.state.downcast_mut::<State<Renderer::Paragraph>>();
 
         // Unfocus text input if it becomes disabled
@@ -1423,6 +1425,7 @@ fn replace_paragraph<Renderer>(
         horizontal_alignment: alignment::Horizontal::Left,
         vertical_alignment: alignment::Vertical::Top,
         shaping: text::Shaping::Advanced,
+        wrap: text::Wrap::None,
     });
 }
 
