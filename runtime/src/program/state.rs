@@ -1,10 +1,13 @@
+use iced_core::widget::operation::{OperationWrapper, Outcome};
+use iced_core::widget::OperationOutputWrapper;
+
 use crate::core::event::{self, Event};
 use crate::core::mouse;
 use crate::core::renderer;
 use crate::core::widget::operation::{self, Operation};
 use crate::core::{Clipboard, Size};
 use crate::user_interface::{self, UserInterface};
-use crate::{Command, Debug, Program};
+use crate::{command::Action, Command, Debug, Program};
 
 /// The execution state of a [`Program`]. It leverages caching, event
 /// processing, and rendering primitive storage.
@@ -27,12 +30,14 @@ where
     /// Creates a new [`State`] with the provided [`Program`], initializing its
     /// primitive with the given logical bounds and renderer.
     pub fn new(
+        id: crate::window::Id,
         mut program: P,
         bounds: Size,
         renderer: &mut P::Renderer,
         debug: &mut Debug,
     ) -> Self {
         let user_interface = build_user_interface(
+            id,
             &mut program,
             user_interface::Cache::default(),
             renderer,
@@ -88,6 +93,7 @@ where
     /// after updating it, only if an update was necessary.
     pub fn update(
         &mut self,
+        id: crate::window::Id,
         bounds: Size,
         cursor: mouse::Cursor,
         renderer: &mut P::Renderer,
@@ -95,8 +101,9 @@ where
         style: &renderer::Style,
         clipboard: &mut dyn Clipboard,
         debug: &mut Debug,
-    ) -> (Vec<Event>, Option<Command<P::Message>>) {
+    ) -> (Vec<Event>, Vec<Action<P::Message>>) {
         let mut user_interface = build_user_interface(
+            id,
             &mut self.program,
             self.cache.take().unwrap(),
             renderer,
@@ -129,7 +136,7 @@ where
         messages.append(&mut self.queued_messages);
         debug.event_processing_finished();
 
-        let command = if messages.is_empty() {
+        let actions = if messages.is_empty() {
             debug.draw_started();
             self.mouse_interaction =
                 user_interface.draw(renderer, theme, style, cursor);
@@ -137,13 +144,13 @@ where
 
             self.cache = Some(user_interface.into_cache());
 
-            None
+            Vec::new()
         } else {
             // When there are messages, we are forced to rebuild twice
             // for now :^)
             let temp_cache = user_interface.into_cache();
 
-            let commands =
+            let (actions, widget_actions) =
                 Command::batch(messages.into_iter().map(|message| {
                     debug.log_message(&message);
 
@@ -152,15 +159,62 @@ where
                     debug.update_finished();
 
                     command
-                }));
+                }))
+                .actions()
+                .into_iter()
+                .partition::<Vec<_>, _>(|action| {
+                    !matches!(action, Action::Widget(_))
+                });
 
             let mut user_interface = build_user_interface(
+                id,
                 &mut self.program,
                 temp_cache,
                 renderer,
                 bounds,
                 debug,
             );
+
+            let had_operations = !widget_actions.is_empty();
+            for operation in widget_actions
+                .into_iter()
+                .map(|action| match action {
+                    Action::Widget(widget_action) => widget_action,
+                    _ => unreachable!(),
+                })
+                .map(OperationWrapper::Message)
+            {
+                let mut current_operation = Some(operation);
+                while let Some(mut operation) = current_operation.take() {
+                    user_interface.operate(renderer, &mut operation);
+                    match operation.finish() {
+                        Outcome::Some(OperationOutputWrapper::Message(
+                            message,
+                        )) => self.queued_messages.push(message),
+                        Outcome::Chain(op) => {
+                            current_operation =
+                                Some(OperationWrapper::Wrapper(op));
+                        }
+                        _ => {}
+                    };
+                }
+            }
+
+            let mut user_interface = if had_operations {
+                // When there were operations, we are forced to rebuild thrice ...
+                let temp_cache = user_interface.into_cache();
+
+                build_user_interface(
+                    id,
+                    &mut self.program,
+                    temp_cache,
+                    renderer,
+                    bounds,
+                    debug,
+                )
+            } else {
+                user_interface
+            };
 
             debug.draw_started();
             self.mouse_interaction =
@@ -169,21 +223,25 @@ where
 
             self.cache = Some(user_interface.into_cache());
 
-            Some(commands)
+            actions
         };
 
-        (uncaptured_events, command)
+        (uncaptured_events, actions)
     }
 
     /// Applies [`Operation`]s to the [`State`]
     pub fn operate(
         &mut self,
+        id: crate::window::Id,
         renderer: &mut P::Renderer,
-        operations: impl Iterator<Item = Box<dyn Operation<P::Message>>>,
+        operations: impl Iterator<
+            Item = Box<dyn Operation<OperationOutputWrapper<P::Message>>>,
+        >,
         bounds: Size,
         debug: &mut Debug,
     ) {
         let mut user_interface = build_user_interface(
+            id,
             &mut self.program,
             self.cache.take().unwrap(),
             renderer,
@@ -199,12 +257,15 @@ where
 
                 match operation.finish() {
                     operation::Outcome::None => {}
-                    operation::Outcome::Some(message) => {
+                    operation::Outcome::Some(
+                        OperationOutputWrapper::Message(message),
+                    ) => {
                         self.queued_messages.push(message);
                     }
                     operation::Outcome::Chain(next) => {
                         current_operation = Some(next);
                     }
+                    _ => {}
                 };
             }
         }
@@ -214,6 +275,7 @@ where
 }
 
 fn build_user_interface<'a, P: Program>(
+    _id: crate::window::Id,
     program: &'a mut P,
     cache: user_interface::Cache,
     renderer: &mut P::Renderer,
