@@ -6,13 +6,14 @@ use crate::core::mouse;
 use crate::core::overlay;
 use crate::core::renderer;
 use crate::core::widget::tree::{self, Tree};
-use crate::core::widget::{self, Operation};
+use crate::core::widget::{self, Id, Operation};
 use crate::core::{
     Background, Clipboard, Color, Element, Layout, Length, Padding, Pixels,
     Point, Rectangle, Shell, Size, Vector, Widget,
 };
 use crate::runtime::Command;
 
+use iced_renderer::core::widget::OperationOutputWrapper;
 pub use iced_style::container::{Appearance, StyleSheet};
 
 /// An element decorating some content.
@@ -28,7 +29,6 @@ pub struct Container<
     Theme: StyleSheet,
     Renderer: crate::core::Renderer,
 {
-    id: Option<Id>,
     padding: Padding,
     width: Length,
     height: Length,
@@ -54,7 +54,6 @@ where
         let size = content.as_widget().size_hint();
 
         Container {
-            id: None,
             padding: Padding::ZERO,
             width: size.width.fluid(),
             height: size.height.fluid(),
@@ -65,12 +64,6 @@ where
             style: Default::default(),
             content,
         }
-    }
-
-    /// Sets the [`Id`] of the [`Container`].
-    pub fn id(mut self, id: Id) -> Self {
-        self.id = Some(id);
-        self
     }
 
     /// Sets the [`Padding`] of the [`Container`].
@@ -152,8 +145,8 @@ where
         self.content.as_widget().children()
     }
 
-    fn diff(&self, tree: &mut Tree) {
-        self.content.as_widget().diff(tree);
+    fn diff(&mut self, tree: &mut Tree) {
+        self.content.as_widget_mut().diff(tree);
     }
 
     fn size(&self) -> Size<Length> {
@@ -187,10 +180,10 @@ where
         tree: &mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn Operation<Message>,
+        operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
     ) {
         operation.container(
-            self.id.as_ref().map(|id| &id.0),
+            self.content.as_widget().id().as_ref(),
             layout.bounds(),
             &mut |operation| {
                 self.content.as_widget().operate(
@@ -263,9 +256,13 @@ where
                 renderer,
                 theme,
                 &renderer::Style {
+                    icon_color: style
+                        .icon_color
+                        .unwrap_or(renderer_style.icon_color),
                     text_color: style
                         .text_color
                         .unwrap_or(renderer_style.text_color),
+                    scale_factor: renderer_style.scale_factor,
                 },
                 layout.children().next().unwrap(),
                 cursor,
@@ -287,6 +284,49 @@ where
             renderer,
             translation,
         )
+    }
+
+    #[cfg(feature = "a11y")]
+    /// get the a11y nodes for the widget
+    fn a11y_nodes(
+        &self,
+        layout: Layout<'_>,
+        state: &Tree,
+        cursor: mouse::Cursor,
+    ) -> iced_accessibility::A11yTree {
+        let c_layout = layout.children().next().unwrap();
+        let c_state = state.children.get(0);
+
+        self.content.as_widget().a11y_nodes(
+            c_layout,
+            c_state.unwrap_or(&Tree::empty()),
+            cursor,
+        )
+    }
+
+    fn drag_destinations(
+        &self,
+        state: &Tree,
+        layout: Layout<'_>,
+        renderer: &Renderer,
+        dnd_rectangles: &mut iced_style::core::clipboard::DndDestinationRectangles,
+    ) {
+        if let Some(l) = layout.children().next() {
+            self.content.as_widget().drag_destinations(
+                state,
+                l,
+                renderer,
+                dnd_rectangles,
+            );
+        }
+    }
+
+    fn id(&self) -> Option<Id> {
+        self.content.as_widget().id().clone()
+    }
+
+    fn set_id(&mut self, id: Id) {
+        self.content.as_widget_mut().set_id(id);
     }
 }
 
@@ -354,30 +394,6 @@ pub fn draw_background<Renderer>(
                 .background
                 .unwrap_or(Background::Color(Color::TRANSPARENT)),
         );
-    }
-}
-
-/// The identifier of a [`Container`].
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Id(widget::Id);
-
-impl Id {
-    /// Creates a custom [`Id`].
-    pub fn new(id: impl Into<std::borrow::Cow<'static, str>>) -> Self {
-        Self(widget::Id::new(id))
-    }
-
-    /// Creates a unique [`Id`].
-    ///
-    /// This function produces a different [`Id`] every time it is called.
-    pub fn unique() -> Self {
-        Self(widget::Id::unique())
-    }
-}
-
-impl From<Id> for widget::Id {
-    fn from(id: Id) -> Self {
-        id.0
     }
 }
 
@@ -463,7 +479,7 @@ pub fn visible_bounds(id: Id) -> Command<Option<Rectangle>> {
     }
 
     Command::widget(VisibleBounds {
-        target: id.into(),
+        target: id,
         depth: 0,
         scrollables: Vec::new(),
         bounds: None,
