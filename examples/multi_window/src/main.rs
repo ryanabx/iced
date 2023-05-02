@@ -4,8 +4,8 @@ use iced::multi_window::{self, Application};
 use iced::widget::{button, column, container, scrollable, text, text_input};
 use iced::window;
 use iced::{
-    Alignment, Command, Element, Length, Point, Settings, Subscription, Theme,
-    Vector,
+    id::Id, Alignment, Command, Element, Length, Point, Settings, Subscription,
+    Theme, Vector,
 };
 
 use std::collections::HashMap;
@@ -26,7 +26,7 @@ struct Window {
     scale_input: String,
     current_scale: f64,
     theme: Theme,
-    input_id: iced::widget::text_input::Id,
+    input_id: Id,
 }
 
 #[derive(Debug, Clone)]
@@ -178,7 +178,7 @@ impl Window {
             } else {
                 Theme::Dark
             },
-            input_id: text_input::Id::unique(),
+            input_id: Id::unique(),
         }
     }
 

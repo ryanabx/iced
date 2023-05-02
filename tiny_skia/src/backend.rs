@@ -171,8 +171,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 let transform = into_transform(transformation)
                     .post_scale(scale_factor, scale_factor);
@@ -184,14 +185,24 @@ impl Backend {
                     .min(bounds.height / 2.0);
 
                 let mut fill_border_radius = <[f32; 4]>::from(border.radius);
+                // Offset the fill by the border width
+                let path_bounds = Rectangle {
+                    x: bounds.x + border_width,
+                    y: bounds.y + border_width,
+                    width: bounds.width - 2.0 * border_width,
+                    height: bounds.height - 2.0 * border_width,
+                };
+                // fill border radius is the border radius minus the border width
                 for radius in &mut fill_border_radius {
-                    *radius = (*radius)
-                        .min(bounds.width / 2.0)
-                        .min(bounds.height / 2.0);
+                    *radius = (*radius - border_width / 2.0)
+                        .min(path_bounds.width / 2.0)
+                        .min(path_bounds.height / 2.0);
                 }
-                let path = rounded_rectangle(*bounds, fill_border_radius);
+                let path = rounded_rectangle(path_bounds, fill_border_radius);
 
-                if shadow.color.a > 0.0 {
+                // TODO: Disabled due to graphical glitches
+                // if shadow.color.a > 0.0 {
+                if false {
                     let shadow_bounds = (Rectangle {
                         x: bounds.x + shadow.offset.x - shadow.blur_radius,
                         y: bounds.y + shadow.offset.y - shadow.blur_radius,
@@ -379,26 +390,32 @@ impl Backend {
                             clip_mask,
                         );
                     } else {
+                        let transform = tiny_skia::Transform::from_translate(
+                            transform.tx,
+                            transform.ty,
+                        );
+
                         // Draw corners that have too small border radii as having no border radius,
                         // but mask them with the rounded rectangle with the correct border radius.
                         let mut temp_pixmap = tiny_skia::Pixmap::new(
-                            bounds.width as u32,
-                            bounds.height as u32,
+                            physical_bounds.width as u32,
+                            physical_bounds.height as u32,
                         )
                         .unwrap();
 
                         let mut quad_mask = tiny_skia::Mask::new(
-                            bounds.width as u32,
-                            bounds.height as u32,
+                            physical_bounds.width as u32,
+                            physical_bounds.height as u32,
                         )
                         .unwrap();
 
                         let zero_bounds = Rectangle {
                             x: 0.0,
                             y: 0.0,
-                            width: bounds.width,
-                            height: bounds.height,
+                            width: physical_bounds.width,
+                            height: physical_bounds.height,
                         };
+
                         let path =
                             rounded_rectangle(zero_bounds, fill_border_radius);
 
@@ -409,12 +426,17 @@ impl Backend {
                             transform,
                         );
                         let path_bounds = Rectangle {
-                            x: border_width / 2.0,
-                            y: border_width / 2.0,
-                            width: bounds.width - border_width,
-                            height: bounds.height - border_width,
+                            x: (border_width / 2.0) * scale_factor,
+                            y: (border_width / 2.0) * scale_factor,
+                            width: physical_bounds.width
+                                - border_width * scale_factor,
+                            height: physical_bounds.height
+                                - border_width * scale_factor,
                         };
 
+                        for r in &mut border_radius {
+                            *r /= scale_factor;
+                        }
                         let border_radius_path =
                             rounded_rectangle(path_bounds, border_radius);
 
@@ -428,7 +450,7 @@ impl Backend {
                                 ..tiny_skia::Paint::default()
                             },
                             &tiny_skia::Stroke {
-                                width: border_width,
+                                width: border_width * scale_factor,
                                 ..tiny_skia::Stroke::default()
                             },
                             transform,
@@ -436,8 +458,8 @@ impl Backend {
                         );
 
                         pixels.draw_pixmap(
-                            bounds.x as i32,
-                            bounds.y as i32,
+                            (bounds.x / scale_factor) as i32,
+                            (bounds.y / scale_factor) as i32,
                             temp_pixmap.as_ref(),
                             &tiny_skia::PixmapPaint::default(),
                             transform,
@@ -461,8 +483,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 self.text_pipeline.draw_paragraph(
                     paragraph,
@@ -488,8 +511,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 self.text_pipeline.draw_editor(
                     editor,
@@ -520,8 +544,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 self.text_pipeline.draw_cached(
                     content,
@@ -551,10 +576,14 @@ impl Backend {
 
                 let (width, height) = buffer.size();
 
-                let physical_bounds =
-                    Rectangle::new(*position, Size::new(width, height))
-                        * transformation
-                        * scale_factor;
+                let physical_bounds = Rectangle::new(
+                    *position,
+                    Size::new(
+                        width.unwrap_or_default(),
+                        height.unwrap_or_default(),
+                    ),
+                ) * transformation
+                    * scale_factor;
 
                 if !clip_bounds.intersects(&physical_bounds) {
                     return;
@@ -578,6 +607,7 @@ impl Backend {
                 handle,
                 filter_method,
                 bounds,
+                border_radius,
             } => {
                 let physical_bounds = (*bounds * transformation) * scale_factor;
 
@@ -585,8 +615,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 let transform = into_transform(transformation)
                     .post_scale(scale_factor, scale_factor);
@@ -598,6 +629,7 @@ impl Backend {
                     pixels,
                     transform,
                     clip_mask,
+                    *border_radius,
                 );
             }
             #[cfg(not(feature = "image"))]
@@ -618,8 +650,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 self.vector_pipeline.draw(
                     handle,
@@ -654,8 +687,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 pixels.fill_path(
                     path,
@@ -685,8 +719,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 pixels.stroke_path(
                     path,

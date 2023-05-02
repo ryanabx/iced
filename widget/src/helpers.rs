@@ -24,6 +24,13 @@ use crate::vertical_slider::{self, VerticalSlider};
 use crate::{Column, MouseArea, Row, Space, Themer};
 
 use std::borrow::Borrow;
+
+#[cfg(feature = "wayland")]
+use crate::dnd_listener::DndListener;
+#[cfg(feature = "wayland")]
+use crate::dnd_source::DndSource;
+
+use std::borrow::Cow;
 use std::ops::RangeInclusive;
 
 /// Creates a [`Column`] with the given children.
@@ -368,7 +375,10 @@ where
 ///
 /// [`Image`]: crate::Image
 #[cfg(feature = "image")]
-pub fn image<Handle>(handle: impl Into<Handle>) -> crate::Image<Handle> {
+#[cfg_attr(docsrs, doc(cfg(feature = "image")))]
+pub fn image<'a, Handle>(
+    handle: impl Into<Handle>,
+) -> crate::Image<'a, Handle> {
     crate::Image::new(handle.into())
 }
 
@@ -468,4 +478,26 @@ where
     NewTheme: Clone,
 {
     Themer::new(move |_| new_theme.clone(), content)
+}
+
+#[cfg(feature = "wayland")]
+/// A container for a dnd source
+pub fn dnd_source<'a, Message, Theme, Renderer>(
+    widget: impl Into<Element<'a, Message, Theme, Renderer>>,
+) -> DndSource<'a, Message, Theme, Renderer>
+where
+    Renderer: core::Renderer,
+{
+    DndSource::new(widget)
+}
+
+#[cfg(feature = "wayland")]
+/// A container for a dnd target
+pub fn dnd_listener<'a, Message, Theme, Renderer>(
+    widget: impl Into<Element<'a, Message, Theme, Renderer>>,
+) -> DndListener<'a, Message, Theme, Renderer>
+where
+    Renderer: core::Renderer,
+{
+    DndListener::new(widget)
 }

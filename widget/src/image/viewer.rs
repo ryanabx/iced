@@ -343,6 +343,7 @@ where
                         y: bounds.y,
                         ..Rectangle::with_size(image_size)
                     },
+                    [0.0; 4],
                 );
             });
         });

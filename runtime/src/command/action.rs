@@ -5,7 +5,9 @@ use crate::futures::MaybeSend;
 use crate::system;
 use crate::window;
 
+use dnd::DndAction;
 use std::any::Any;
+
 use std::borrow::Cow;
 use std::fmt;
 
@@ -35,6 +37,9 @@ pub enum Action<T> {
     /// Run a widget action.
     Widget(Box<dyn widget::Operation<T>>),
 
+    /// Run a Dnd action.
+    Dnd(crate::dnd::DndAction<T>),
+
     /// Load a font from its bytes.
     LoadFont {
         /// The bytes of the font to load.
@@ -46,6 +51,8 @@ pub enum Action<T> {
 
     /// A custom action supported by a specific runtime.
     Custom(Box<dyn Any>),
+    /// Run a platform specific action
+    PlatformSpecific(crate::command::platform_specific::Action<T>),
 }
 
 impl<T> Action<T> {
@@ -76,6 +83,12 @@ impl<T> Action<T> {
                 tagger: Box::new(move |result| f(tagger(result))),
             },
             Self::Custom(custom) => Action::Custom(custom),
+            Self::PlatformSpecific(action) => {
+                Action::PlatformSpecific(action.map(f))
+            }
+            Self::Dnd(a) => Action::Dnd(a.map(f)),
+            Action::LoadFont { bytes, tagger } => todo!(),
+            Action::PlatformSpecific(_) => todo!(),
         }
     }
 }
@@ -95,6 +108,10 @@ impl<T> fmt::Debug for Action<T> {
             Self::Widget(_action) => write!(f, "Action::Widget"),
             Self::LoadFont { .. } => write!(f, "Action::LoadFont"),
             Self::Custom(_) => write!(f, "Action::Custom"),
+            Self::PlatformSpecific(action) => {
+                write!(f, "Action::PlatformSpecific({:?})", action)
+            }
+            Self::Dnd(action) => write!(f, "Action::Dnd"),
         }
     }
 }

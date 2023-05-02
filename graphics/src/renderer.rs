@@ -114,6 +114,7 @@ where
     type Font = Font;
     type Paragraph = text::Paragraph;
     type Editor = text::Editor;
+    type Raw = text::Raw;
 
     const ICON_FONT: Font = Font::with_name("Iced-Icons");
     const CHECKMARK_ICON: char = '\u{f00c}';
@@ -161,6 +162,10 @@ where
         });
     }
 
+    fn fill_raw(&mut self, raw: Self::Raw) {
+        self.primitives.push(Primitive::RawText(raw));
+    }
+
     fn fill_text(
         &mut self,
         text: Text,
@@ -198,11 +203,13 @@ where
         handle: image::Handle,
         filter_method: image::FilterMethod,
         bounds: Rectangle,
+        border_radius: [f32; 4],
     ) {
         self.primitives.push(Primitive::Image {
             handle,
             filter_method,
             bounds,
+            border_radius,
         });
     }
 }

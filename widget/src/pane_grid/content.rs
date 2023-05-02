@@ -1,3 +1,5 @@
+use iced_renderer::core::widget::{Operation, OperationOutputWrapper};
+
 use crate::container;
 use crate::core::event::{self, Event};
 use crate::core::layout;
@@ -91,13 +93,13 @@ where
         }
     }
 
-    pub(super) fn diff(&self, tree: &mut Tree) {
+    pub(super) fn diff(&mut self, tree: &mut Tree) {
         if tree.children.len() == 2 {
-            if let Some(title_bar) = self.title_bar.as_ref() {
+            if let Some(title_bar) = self.title_bar.as_mut() {
                 title_bar.diff(&mut tree.children[1]);
             }
 
-            tree.children[0].diff(&self.body);
+            tree.children[0].diff(&mut self.body);
         } else {
             *tree = self.state();
         }
@@ -214,7 +216,7 @@ where
         tree: &mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn widget::Operation<Message>,
+        operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
     ) {
         let body_layout = if let Some(title_bar) = &self.title_bar {
             let mut children = layout.children();
