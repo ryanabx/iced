@@ -76,7 +76,7 @@ pub fn program<State, Message, Theme, Renderer>(
 ) -> Program<impl Definition<State = State, Message = Message, Theme = Theme>>
 where
     State: 'static,
-    Message: Send + std::fmt::Debug,
+    Message: Send + std::fmt::Debug + 'static,
     Theme: Default + DefaultStyle,
     Renderer: self::Renderer,
 {
@@ -94,7 +94,7 @@ where
     impl<State, Message, Theme, Renderer, Update, View> Definition
         for Application<State, Message, Theme, Renderer, Update, View>
     where
-        Message: Send + std::fmt::Debug,
+        Message: Send + std::fmt::Debug + 'static,
         Theme: Default + DefaultStyle,
         Renderer: self::Renderer,
         Update: self::Update<State, Message>,
@@ -252,6 +252,7 @@ impl<P: Definition> Program<P> {
             default_font: settings.default_font,
             default_text_size: settings.default_text_size,
             antialiasing: settings.antialiasing,
+            exit_on_close_request: settings.exit_on_close_request,
         })
     }
 
@@ -420,7 +421,7 @@ pub trait Definition: Sized {
     type State;
 
     /// The message of the program.
-    type Message: Send + std::fmt::Debug;
+    type Message: Send + std::fmt::Debug + 'static;
 
     /// The theme of the program.
     type Theme: Default + DefaultStyle;
