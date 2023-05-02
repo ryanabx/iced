@@ -86,7 +86,7 @@ pub enum Action<T> {
     /// Show the system menu at cursor position.
     ///
     /// ## Platform-specific
-    /// Android / iOS / macOS / Orbital / Web / X11: Unsupported.
+    /// Android / iOS / macOS / Orbital / Wayland / Web / X11: Unsupported.
     ShowSystemMenu(Id),
     /// Fetch the raw identifier unique to the window.
     FetchId(Id, Box<dyn FnOnce(u64) -> T + 'static>),
