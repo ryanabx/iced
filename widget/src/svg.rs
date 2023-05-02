@@ -1,4 +1,6 @@
 //! Display vector graphics in your application.
+use iced_runtime::core::widget::Id;
+
 use crate::core::layout;
 use crate::core::mouse;
 use crate::core::renderer;
@@ -8,6 +10,7 @@ use crate::core::{
     ContentFit, Element, Layout, Length, Rectangle, Size, Vector, Widget,
 };
 
+use std::borrow::Cow;
 use std::path::PathBuf;
 
 pub use crate::style::svg::{Appearance, StyleSheet};
@@ -24,6 +27,13 @@ pub struct Svg<Theme = crate::Theme>
 where
     Theme: StyleSheet,
 {
+    id: Id,
+    #[cfg(feature = "a11y")]
+    name: Option<Cow<'a, str>>,
+    #[cfg(feature = "a11y")]
+    description: Option<iced_accessibility::Description<'a>>,
+    #[cfg(feature = "a11y")]
+    label: Option<Vec<iced_accessibility::accesskit::NodeId>>,
     handle: Handle,
     width: Length,
     height: Length,
@@ -38,6 +48,13 @@ where
     /// Creates a new [`Svg`] from the given [`Handle`].
     pub fn new(handle: impl Into<Handle>) -> Self {
         Svg {
+            id: Id::unique(),
+            #[cfg(feature = "a11y")]
+            name: None,
+            #[cfg(feature = "a11y")]
+            description: None,
+            #[cfg(feature = "a11y")]
+            label: None,
             handle: handle.into(),
             width: Length::Fill,
             height: Length::Shrink,
@@ -82,6 +99,41 @@ where
     #[must_use]
     pub fn style(mut self, style: impl Into<Theme::Style>) -> Self {
         self.style = style.into();
+        self
+    }
+
+    #[cfg(feature = "a11y")]
+    /// Sets the name of the [`Button`].
+    pub fn name(mut self, name: impl Into<Cow<'a, str>>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    #[cfg(feature = "a11y")]
+    /// Sets the description of the [`Button`].
+    pub fn description_widget<T: iced_accessibility::Describes>(
+        mut self,
+        description: &T,
+    ) -> Self {
+        self.description = Some(iced_accessibility::Description::Id(
+            description.description(),
+        ));
+        self
+    }
+
+    #[cfg(feature = "a11y")]
+    /// Sets the description of the [`Button`].
+    pub fn description(mut self, description: impl Into<Cow<'a, str>>) -> Self {
+        self.description =
+            Some(iced_accessibility::Description::Text(description.into()));
+        self
+    }
+
+    #[cfg(feature = "a11y")]
+    /// Sets the label of the [`Button`].
+    pub fn label(mut self, label: &dyn iced_accessibility::Labels) -> Self {
+        self.label =
+            Some(label.label().into_iter().map(|l| l.into()).collect());
         self
     }
 }
@@ -178,6 +230,66 @@ where
         } else {
             render(renderer);
         }
+    }
+
+    #[cfg(feature = "a11y")]
+    fn a11y_nodes(
+        &self,
+        layout: Layout<'_>,
+        _state: &Tree,
+        _cursor: mouse::Cursor,
+    ) -> iced_accessibility::A11yTree {
+        use iced_accessibility::{
+            accesskit::{NodeBuilder, NodeId, Rect, Role},
+            A11yTree,
+        };
+
+        let bounds = layout.bounds();
+        let Rectangle {
+            x,
+            y,
+            width,
+            height,
+        } = bounds;
+        let bounds = Rect::new(
+            x as f64,
+            y as f64,
+            (x + width) as f64,
+            (y + height) as f64,
+        );
+        let mut node = NodeBuilder::new(Role::Image);
+        node.set_bounds(bounds);
+        if let Some(name) = self.name.as_ref() {
+            node.set_name(name.clone());
+        }
+        match self.description.as_ref() {
+            Some(iced_accessibility::Description::Id(id)) => {
+                node.set_described_by(
+                    id.iter()
+                        .cloned()
+                        .map(|id| NodeId::from(id))
+                        .collect::<Vec<_>>(),
+                );
+            }
+            Some(iced_accessibility::Description::Text(text)) => {
+                node.set_description(text.clone());
+            }
+            None => {}
+        }
+
+        if let Some(label) = self.label.as_ref() {
+            node.set_labelled_by(label.clone());
+        }
+
+        A11yTree::leaf(node, self.id.clone())
+    }
+
+    fn id(&self) -> Option<Id> {
+        Some(self.id.clone())
+    }
+
+    fn set_id(&mut self, id: Id) {
+        self.id = id;
     }
 }
 

@@ -2,13 +2,13 @@
 mod state;
 mod window_manager;
 
-pub use state::State;
-
+use crate::application::UserEventWrapper;
 use crate::conversion;
 use crate::core;
 use crate::core::mouse;
 use crate::core::renderer;
 use crate::core::widget::operation;
+use crate::core::widget::Operation;
 use crate::core::window;
 use crate::core::{Point, Size};
 use crate::futures::futures::channel::mpsc;
@@ -17,6 +17,8 @@ use crate::futures::futures::task;
 use crate::futures::futures::{Future, StreamExt};
 use crate::futures::{Executor, Runtime, Subscription};
 use crate::graphics::{compositor, Compositor};
+use crate::multi_window::operation::focusable::focus;
+use crate::multi_window::operation::OperationWrapper;
 use crate::multi_window::window_manager::WindowManager;
 use crate::runtime::command::{self, Command};
 use crate::runtime::multi_window::Program;
@@ -24,11 +26,24 @@ use crate::runtime::user_interface::{self, UserInterface};
 use crate::runtime::Debug;
 use crate::style::application::StyleSheet;
 use crate::{Clipboard, Error, Proxy, Settings};
+use iced_runtime::futures::futures::FutureExt;
+use iced_style::Theme;
+pub use state::State;
 
 use std::collections::HashMap;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
 use std::time::Instant;
+
+/// subscription mapper helper
+pub fn subscription_map<A, E>(e: A::Message) -> UserEventWrapper<A::Message>
+where
+    A: Application,
+    E: Executor,
+    <A as Program>::Theme: StyleSheet,
+{
+    UserEventWrapper::Message(e)
+}
 
 /// An interactive, native, cross-platform, multi-windowed application.
 ///
@@ -340,10 +355,16 @@ enum Control {
 async fn run_instance<A, E, C>(
     mut application: A,
     mut compositor: C,
-    mut runtime: Runtime<E, Proxy<A::Message>, A::Message>,
-    mut proxy: winit::event_loop::EventLoopProxy<A::Message>,
+    mut runtime: Runtime<
+        E,
+        Proxy<UserEventWrapper<A::Message>>,
+        UserEventWrapper<A::Message>,
+    >,
+    mut proxy: winit::event_loop::EventLoopProxy<UserEventWrapper<A::Message>>,
     mut debug: Debug,
-    mut event_receiver: mpsc::UnboundedReceiver<Event<A::Message>>,
+    mut event_receiver: mpsc::UnboundedReceiver<
+        Event<UserEventWrapper<A::Message>>,
+    >,
     mut control_sender: mpsc::UnboundedSender<Control>,
     init_command: Command<A::Message>,
     mut window_manager: WindowManager<A, C>,
@@ -366,6 +387,39 @@ async fn run_instance<A, E, C>(
     }
 
     let mut clipboard = Clipboard::connect(&main_window.raw);
+
+    #[cfg(feature = "a11y")]
+    let (window_a11y_id, adapter, mut a11y_enabled) = {
+        let node_id = core::id::window_node_id();
+
+        use iced_accessibility::accesskit::{
+            NodeBuilder, NodeId, Role, Tree, TreeUpdate,
+        };
+        use iced_accessibility::accesskit_winit::Adapter;
+
+        let title = main_window.raw.title().to_string();
+        let proxy_clone = proxy.clone();
+        (
+            node_id,
+            Adapter::new(
+                &main_window.raw,
+                move || {
+                    let _ =
+                        proxy_clone.send_event(UserEventWrapper::A11yEnabled);
+                    let mut node = NodeBuilder::new(Role::Window);
+                    node.set_name(title.clone());
+                    let node = node.build(&mut iced_accessibility::accesskit::NodeClassSet::lock_global());
+                    TreeUpdate {
+                        nodes: vec![(NodeId(node_id), node)],
+                        tree: Some(Tree::new(NodeId(node_id))),
+                        focus: None,
+                    }
+                },
+                proxy.clone(),
+            ),
+            false,
+        )
+    };
     let mut events = {
         vec![(
             Some(window::Id::MAIN),
@@ -403,7 +457,12 @@ async fn run_instance<A, E, C>(
         &mut ui_caches,
     );
 
-    runtime.track(application.subscription().into_recipes());
+    runtime.track(
+        application
+            .subscription()
+            .map(subscription_map::<A, E>)
+            .into_recipes(),
+    );
 
     let mut messages = Vec::new();
 
@@ -477,9 +536,6 @@ async fn run_instance<A, E, C>(
                                 ),
                             ),
                         ));
-                    }
-                    event::Event::UserEvent(message) => {
-                        messages.push(message);
                     }
                     event::Event::WindowEvent {
                         window_id: id,
@@ -802,6 +858,168 @@ async fn run_instance<A, E, C>(
                                     cached_interfaces,
                                 ));
                         }
+
+                        debug.draw_started();
+
+                        for (id, window) in window_manager.iter_mut() {
+                            // TODO: Avoid redrawing all the time by forcing widgets to
+                            //  request redraws on state changes
+                            //
+                            // Then, we can use the `interface_state` here to decide if a redraw
+                            // is needed right away, or simply wait until a specific time.
+                            let redraw_event = core::Event::Window(
+                                id,
+                                window::Event::RedrawRequested(Instant::now()),
+                            );
+
+                            let cursor = window.state.cursor();
+
+                            let ui = user_interfaces
+                                .get_mut(&id)
+                                .expect("Get user interface");
+
+                            let (ui_state, _) = ui.update(
+                                &[redraw_event.clone()],
+                                cursor,
+                                &mut window.renderer,
+                                &mut clipboard,
+                                &mut messages,
+                            );
+
+                            let new_mouse_interaction = {
+                                let state = &window.state;
+
+                                ui.draw(
+                                    &mut window.renderer,
+                                    state.theme(),
+                                    &renderer::Style {
+                                        text_color: state.text_color(),
+                                    },
+                                    cursor,
+                                )
+                            };
+
+                            if new_mouse_interaction != window.mouse_interaction
+                            {
+                                window.raw.set_cursor_icon(
+                                    conversion::mouse_interaction(
+                                        new_mouse_interaction,
+                                    ),
+                                );
+
+                                window.mouse_interaction =
+                                    new_mouse_interaction;
+                            }
+
+                            // TODO once widgets can request to be redrawn, we can avoid always requesting a
+                            // redraw
+                            window.raw.request_redraw();
+
+                            runtime.broadcast(
+                                redraw_event.clone(),
+                                core::event::Status::Ignored,
+                            );
+
+                            let _ = control_sender.start_send(
+                                Control::ChangeFlow(match ui_state {
+                                    user_interface::State::Updated {
+                                        redraw_request: Some(redraw_request),
+                                    } => match redraw_request {
+                                        window::RedrawRequest::NextFrame => {
+                                            ControlFlow::Poll
+                                        }
+                                        window::RedrawRequest::At(at) => {
+                                            ControlFlow::WaitUntil(at)
+                                        }
+                                    },
+                                    _ => ControlFlow::Wait,
+                                }),
+                            );
+                        }
+
+                        debug.draw_finished();
+                    }
+                    event::Event::PlatformSpecific(
+                        event::PlatformSpecific::MacOS(
+                            event::MacOS::ReceivedUrl(url),
+                        ),
+                    ) => {
+                        use crate::core::event;
+
+                        events.push((
+                            None,
+                            event::Event::PlatformSpecific(
+                                event::PlatformSpecific::MacOS(
+                                    event::MacOS::ReceivedUrl(url),
+                                ),
+                            ),
+                        ));
+                    }
+                    event::Event::UserEvent(message) => {
+                        match message {
+                            UserEventWrapper::Message(m) => messages.push(m),
+                            #[cfg(feature = "a11y")]
+                            UserEventWrapper::A11y(request) => {
+                                match request.request.action {
+                                    iced_accessibility::accesskit::Action::Focus => {
+                                        // TODO send a command for this
+                                     }
+                                     _ => {}
+                                 }
+                                events.push((
+                                    None,
+                                    conversion::a11y(request.request),
+                                ));
+                            }
+                            #[cfg(feature = "a11y")]
+                            UserEventWrapper::A11yEnabled => {
+                                a11y_enabled = true
+                            }
+                        };
+                    }
+                    event::Event::WindowEvent {
+                        event: window_event,
+                        window_id,
+                    } => {
+                        let Some((id, window)) =
+                            window_manager.get_mut_alias(window_id)
+                        else {
+                            continue;
+                        };
+
+                        if matches!(
+                            window_event,
+                            winit::event::WindowEvent::CloseRequested
+                        ) && window.exit_on_close_request
+                        {
+                            let _ = window_manager.remove(id);
+                            let _ = user_interfaces.remove(&id);
+                            let _ = ui_caches.remove(&id);
+
+                            events.push((
+                                None,
+                                core::Event::Window(id, window::Event::Closed),
+                            ));
+
+                            if window_manager.is_empty() {
+                                break 'main;
+                            }
+                        } else {
+                            window.state.update(
+                                &window.raw,
+                                &window_event,
+                                &mut debug,
+                            );
+
+                            if let Some(event) = conversion::window_event(
+                                id,
+                                window_event,
+                                window.state.scale_factor(),
+                                window.state.modifiers(),
+                            ) {
+                                events.push((Some(id), event));
+                            }
+                        }
                     }
                     _ => {}
                 }
@@ -840,10 +1058,14 @@ where
 fn update<A: Application, C, E: Executor>(
     application: &mut A,
     compositor: &mut C,
-    runtime: &mut Runtime<E, Proxy<A::Message>, A::Message>,
+    runtime: &mut Runtime<
+        E,
+        Proxy<UserEventWrapper<A::Message>>,
+        UserEventWrapper<A::Message>,
+    >,
     clipboard: &mut Clipboard,
     control_sender: &mut mpsc::UnboundedSender<Control>,
-    proxy: &mut winit::event_loop::EventLoopProxy<A::Message>,
+    proxy: &mut winit::event_loop::EventLoopProxy<UserEventWrapper<A::Message>>,
     debug: &mut Debug,
     messages: &mut Vec<A::Message>,
     window_manager: &mut WindowManager<A, C>,
@@ -873,8 +1095,11 @@ fn update<A: Application, C, E: Executor>(
         );
     }
 
-    let subscription = application.subscription();
-    runtime.track(subscription.into_recipes());
+    let subscription = application
+        .subscription()
+        .map(subscription_map::<A, E>)
+        .into_recipes();
+    runtime.track(subscription);
 }
 
 /// Runs the actions of a [`Command`].
@@ -882,10 +1107,15 @@ fn run_command<A, C, E>(
     application: &A,
     compositor: &mut C,
     command: Command<A::Message>,
-    runtime: &mut Runtime<E, Proxy<A::Message>, A::Message>,
+    runtime: &mut Runtime<
+        E,
+        Proxy<UserEventWrapper<A::Message>>,
+        UserEventWrapper<A::Message>,
+    >,
     clipboard: &mut Clipboard,
     control_sender: &mut mpsc::UnboundedSender<Control>,
-    proxy: &mut winit::event_loop::EventLoopProxy<A::Message>,
+    proxy: &mut winit::event_loop::EventLoopProxy<UserEventWrapper<A::Message>>,
+
     debug: &mut Debug,
     window_manager: &mut WindowManager<A, C>,
     ui_caches: &mut HashMap<window::Id, user_interface::Cache>,
@@ -902,17 +1132,21 @@ fn run_command<A, C, E>(
     for action in command.actions() {
         match action {
             command::Action::Future(future) => {
-                runtime.spawn(Box::pin(future));
+                runtime.spawn(Box::pin(
+                    future.map(|e| UserEventWrapper::Message(e)),
+                ));
             }
             command::Action::Stream(stream) => {
-                runtime.run(Box::pin(stream));
+                runtime.run(Box::pin(
+                    stream.map(|e| UserEventWrapper::Message(e)),
+                ));
             }
             command::Action::Clipboard(action) => match action {
                 clipboard::Action::Read(tag, kind) => {
                     let message = tag(clipboard.read(kind));
 
                     proxy
-                        .send_event(message)
+                        .send_event(UserEventWrapper::Message(message))
                         .expect("Send message to event loop");
                 }
                 clipboard::Action::Write(contents, kind) => {
@@ -965,9 +1199,8 @@ fn run_command<A, C, E>(
                             .to_logical(window.raw.scale_factor());
 
                         proxy
-                            .send_event(callback(Size::new(
-                                size.width,
-                                size.height,
+                            .send_event(UserEventWrapper::Message(callback(
+                                Size::new(size.width, size.height),
                             )))
                             .expect("Send message to event loop");
                     }
@@ -975,7 +1208,9 @@ fn run_command<A, C, E>(
                 window::Action::FetchMaximized(id, callback) => {
                     if let Some(window) = window_manager.get_mut(id) {
                         proxy
-                            .send_event(callback(window.raw.is_maximized()))
+                            .send_event(UserEventWrapper::Message(callback(
+                                window.raw.is_maximized(),
+                            )))
                             .expect("Send message to event loop");
                     }
                 }
@@ -987,7 +1222,9 @@ fn run_command<A, C, E>(
                 window::Action::FetchMinimized(id, callback) => {
                     if let Some(window) = window_manager.get_mut(id) {
                         proxy
-                            .send_event(callback(window.raw.is_minimized()))
+                            .send_event(UserEventWrapper::Message(callback(
+                                window.raw.is_minimized(),
+                            )))
                             .expect("Send message to event loop");
                     }
                 }
@@ -1048,7 +1285,7 @@ fn run_command<A, C, E>(
                         };
 
                         proxy
-                            .send_event(tag(mode))
+                            .send_event(UserEventWrapper::Message(tag(mode)))
                             .expect("Send message to event loop");
                     }
                 }
@@ -1098,7 +1335,10 @@ fn run_command<A, C, E>(
                 window::Action::FetchId(id, tag) => {
                     if let Some(window) = window_manager.get_mut(id) {
                         proxy
-                            .send_event(tag(window.raw.id().into()))
+                            .send_event(UserEventWrapper::Message(tag(window
+                                .raw
+                                .id()
+                                .into())))
                             .expect("Send message to event loop");
                     }
                 }
@@ -1125,9 +1365,11 @@ fn run_command<A, C, E>(
                         );
 
                         proxy
-                            .send_event(tag(window::Screenshot::new(
-                                bytes,
-                                window.state.physical_size(),
+                            .send_event(UserEventWrapper::Message(tag(
+                                window::Screenshot::new(
+                                    bytes,
+                                    window.state.physical_size(),
+                                ),
                             )))
                             .expect("Event loop doesn't exist.");
                     }
@@ -1147,15 +1389,15 @@ fn run_command<A, C, E>(
                             let message = _tag(information);
 
                             proxy
-                                .send_event(message)
+                                .send_event(UserEventWrapper::Message(message))
                                 .expect("Event loop doesn't exist.");
                         });
                     }
                 }
             },
             command::Action::Widget(action) => {
-                let mut current_operation = Some(action);
-
+                let mut current_operation =
+                    Some(Box::new(OperationWrapper::Message(action)));
                 let mut uis = build_user_interfaces(
                     application,
                     debug,
@@ -1163,9 +1405,7 @@ fn run_command<A, C, E>(
                     std::mem::take(ui_caches),
                 );
 
-                'operate: while let Some(mut operation) =
-                    current_operation.take()
-                {
+                while let Some(mut operation) = current_operation.take() {
                     for (id, ui) in uis.iter_mut() {
                         if let Some(window) = window_manager.get_mut(*id) {
                             ui.operate(&window.renderer, operation.as_mut());
@@ -1173,15 +1413,25 @@ fn run_command<A, C, E>(
                             match operation.finish() {
                                 operation::Outcome::None => {}
                                 operation::Outcome::Some(message) => {
+                                    match message {
+                                operation::OperationOutputWrapper::Message(
+                                    m,
+                                ) => {
                                     proxy
-                                        .send_event(message)
-                                        .expect("Event loop doesn't exist.");
-
-                                    // operation completed, don't need to try to operate on rest of UIs
-                                    break 'operate;
+                                        .send_event(
+                                            UserEventWrapper::Message(m),
+                                        )
+                                        .expect("Send message to event loop");
+                                }
+                                operation::OperationOutputWrapper::Id(_) => {
+                                    // TODO ASHLEY should not ever happen, should this panic!()?
+                                }
+                            }
                                 }
                                 operation::Outcome::Chain(next) => {
-                                    current_operation = Some(next);
+                                    current_operation = Some(Box::new(
+                                        OperationWrapper::Wrapper(next),
+                                    ));
                                 }
                             }
                         }
@@ -1201,11 +1451,14 @@ fn run_command<A, C, E>(
                 }
 
                 proxy
-                    .send_event(tagger(Ok(())))
+                    .send_event(UserEventWrapper::Message(tagger(Ok(()))))
                     .expect("Send message to event loop");
             }
             command::Action::Custom(_) => {
                 log::warn!("Unsupported custom action in `iced_winit` shell");
+            }
+            command::Action::PlatformSpecific(_) => {
+                tracing::warn!("Platform specific commands are not supported yet in multi-window winit mode.");
             }
         }
     }

@@ -360,7 +360,10 @@ where
 ///
 /// [`Image`]: crate::Image
 #[cfg(feature = "image")]
-pub fn image<Handle>(handle: impl Into<Handle>) -> crate::Image<Handle> {
+#[cfg_attr(docsrs, doc(cfg(feature = "image")))]
+pub fn image<'a, Handle>(
+    handle: impl Into<Handle>,
+) -> crate::Image<'a, Handle> {
     crate::Image::new(handle.into())
 }
 

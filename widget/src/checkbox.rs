@@ -1,4 +1,8 @@
 //! Show toggle controls using checkboxes.
+use iced_renderer::core::Size;
+use iced_runtime::core::widget::Id;
+use std::borrow::Cow;
+
 use crate::core::alignment;
 use crate::core::event::{self, Event};
 use crate::core::layout;
@@ -9,7 +13,8 @@ use crate::core::touch;
 use crate::core::widget;
 use crate::core::widget::tree::{self, Tree};
 use crate::core::{
-    Clipboard, Element, Layout, Length, Pixels, Rectangle, Shell, Size, Widget,
+    id::Internal, Alignment, Clipboard, Element, Layout, Length, Pixels, Point,
+    Rectangle, Shell, Widget,
 };
 
 pub use crate::style::checkbox::{Appearance, StyleSheet};
@@ -42,6 +47,12 @@ pub struct Checkbox<
     Theme: StyleSheet + crate::text::StyleSheet,
     Renderer: text::Renderer,
 {
+    id: Id,
+    label_id: Id,
+    #[cfg(feature = "a11y")]
+    name: Option<Cow<'a, str>>,
+    #[cfg(feature = "a11y")]
+    description: Option<iced_accessibility::Description<'a>>,
     is_checked: bool,
     on_toggle: Option<Box<dyn Fn(bool) -> Message + 'a>>,
     label: String,
@@ -74,6 +85,12 @@ where
     ///   * a boolean describing whether the [`Checkbox`] is checked or not
     pub fn new(label: impl Into<String>, is_checked: bool) -> Self {
         Checkbox {
+            id: Id::unique(),
+            label_id: Id::unique(),
+            #[cfg(feature = "a11y")]
+            name: None,
+            #[cfg(feature = "a11y")]
+            description: None,
             is_checked,
             on_toggle: None,
             label: label.into(),
@@ -181,6 +198,33 @@ where
         self.style = style.into();
         self
     }
+
+    #[cfg(feature = "a11y")]
+    /// Sets the name of the [`Button`].
+    pub fn name(mut self, name: impl Into<Cow<'a, str>>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    #[cfg(feature = "a11y")]
+    /// Sets the description of the [`Button`].
+    pub fn description_widget<T: iced_accessibility::Describes>(
+        mut self,
+        description: &T,
+    ) -> Self {
+        self.description = Some(iced_accessibility::Description::Id(
+            description.description(),
+        ));
+        self
+    }
+
+    #[cfg(feature = "a11y")]
+    /// Sets the description of the [`Button`].
+    pub fn description(mut self, description: impl Into<Cow<'a, str>>) -> Self {
+        self.description =
+            Some(iced_accessibility::Description::Text(description.into()));
+        self
+    }
 }
 
 impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
@@ -213,7 +257,7 @@ where
         layout::next_to_each_other(
             &limits.width(self.width),
             self.spacing,
-            |_| layout::Node::new(Size::new(self.size, self.size)),
+            |_| layout::Node::new(crate::core::Size::new(self.size, self.size)),
             |limits| {
                 let state = tree
                     .state
@@ -358,6 +402,94 @@ where
                 },
                 viewport,
             );
+        }
+    }
+
+    #[cfg(feature = "a11y")]
+    /// get the a11y nodes for the widget
+    fn a11y_nodes(
+        &self,
+        layout: Layout<'_>,
+        _state: &Tree,
+        cursor: mouse::Cursor,
+    ) -> iced_accessibility::A11yTree {
+        use iced_accessibility::{
+            accesskit::{
+                Action, CheckedState, NodeBuilder, NodeId, Rect, Role,
+            },
+            A11yNode, A11yTree,
+        };
+
+        let bounds = layout.bounds();
+        let is_hovered = cursor.is_over(bounds);
+        let Rectangle {
+            x,
+            y,
+            width,
+            height,
+        } = bounds;
+
+        let bounds = Rect::new(
+            x as f64,
+            y as f64,
+            (x + width) as f64,
+            (y + height) as f64,
+        );
+
+        let mut node = NodeBuilder::new(Role::CheckBox);
+        node.add_action(Action::Focus);
+        node.add_action(Action::Default);
+        node.set_bounds(bounds);
+        if let Some(name) = self.name.as_ref() {
+            node.set_name(name.clone());
+        }
+        match self.description.as_ref() {
+            Some(iced_accessibility::Description::Id(id)) => {
+                node.set_described_by(
+                    id.iter()
+                        .cloned()
+                        .map(|id| NodeId::from(id))
+                        .collect::<Vec<_>>(),
+                );
+            }
+            Some(iced_accessibility::Description::Text(text)) => {
+                node.set_description(text.clone());
+            }
+            None => {}
+        }
+        node.set_checked_state(if self.is_checked {
+            CheckedState::True
+        } else {
+            CheckedState::False
+        });
+        if is_hovered {
+            node.set_hovered();
+        }
+        node.add_action(Action::Default);
+        let mut label_node = NodeBuilder::new(Role::StaticText);
+
+        label_node.set_name(self.label.clone());
+        // TODO proper label bounds
+        label_node.set_bounds(bounds);
+
+        A11yTree::node_with_child_tree(
+            A11yNode::new(node, self.id.clone()),
+            A11yTree::leaf(label_node, self.label_id.clone()),
+        )
+    }
+    fn id(&self) -> Option<Id> {
+        Some(Id(Internal::Set(vec![
+            self.id.0.clone(),
+            self.label_id.0.clone(),
+        ])))
+    }
+
+    fn set_id(&mut self, id: Id) {
+        if let Id(Internal::Set(list)) = id {
+            if list.len() == 2 {
+                self.id.0 = list[0].clone();
+                self.label_id.0 = list[1].clone();
+            }
         }
     }
 }

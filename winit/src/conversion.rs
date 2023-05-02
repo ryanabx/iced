@@ -844,3 +844,13 @@ pub fn icon(icon: window::Icon) -> Option<winit::window::Icon> {
 fn is_private_use(c: char) -> bool {
     ('\u{E000}'..='\u{F8FF}').contains(&c)
 }
+
+#[cfg(feature = "a11y")]
+pub(crate) fn a11y(
+    event: iced_accessibility::accesskit::ActionRequest,
+) -> Event {
+    // XXX
+    let id =
+        iced_runtime::core::id::Id::from(u128::from(event.target.0) as u64);
+    Event::A11y(id, event)
+}

@@ -6,13 +6,14 @@ use crate::core::mouse;
 use crate::core::overlay;
 use crate::core::renderer;
 use crate::core::widget::tree::{self, Tree};
-use crate::core::widget::{self, Operation};
+use crate::core::widget::{self, Id, Operation};
 use crate::core::{
     Background, Clipboard, Color, Element, Layout, Length, Padding, Pixels,
     Point, Rectangle, Shell, Size, Vector, Widget,
 };
 use crate::runtime::Command;
 
+use iced_renderer::core::widget::OperationOutputWrapper;
 pub use iced_style::container::{Appearance, StyleSheet};
 
 /// An element decorating some content.
@@ -161,8 +162,8 @@ where
         self.content.as_widget().children()
     }
 
-    fn diff(&self, tree: &mut Tree) {
-        self.content.as_widget().diff(tree);
+    fn diff(&mut self, tree: &mut Tree) {
+        self.content.as_widget_mut().diff(tree);
     }
 
     fn size(&self) -> Size<Length> {
@@ -196,10 +197,10 @@ where
         tree: &mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn Operation<Message>,
+        operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
     ) {
         operation.container(
-            self.id.as_ref().map(|id| &id.0),
+            self.id.as_ref(),
             layout.bounds(),
             &mut |operation| {
                 self.content.as_widget().operate(
@@ -301,6 +302,24 @@ where
             translation,
         )
     }
+
+    #[cfg(feature = "a11y")]
+    /// get the a11y nodes for the widget
+    fn a11y_nodes(
+        &self,
+        layout: Layout<'_>,
+        state: &Tree,
+        cursor: mouse::Cursor,
+    ) -> iced_accessibility::A11yTree {
+        let c_layout = layout.children().next().unwrap();
+        let c_state = state.children.get(0);
+
+        self.content.as_widget().a11y_nodes(
+            c_layout,
+            c_state.unwrap_or(&Tree::empty()),
+            cursor,
+        )
+    }
 }
 
 impl<'a, Message, Theme, Renderer> From<Container<'a, Message, Theme, Renderer>>
@@ -367,30 +386,6 @@ pub fn draw_background<Renderer>(
                 .background
                 .unwrap_or(Background::Color(Color::TRANSPARENT)),
         );
-    }
-}
-
-/// The identifier of a [`Container`].
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Id(widget::Id);
-
-impl Id {
-    /// Creates a custom [`Id`].
-    pub fn new(id: impl Into<std::borrow::Cow<'static, str>>) -> Self {
-        Self(widget::Id::new(id))
-    }
-
-    /// Creates a unique [`Id`].
-    ///
-    /// This function produces a different [`Id`] every time it is called.
-    pub fn unique() -> Self {
-        Self(widget::Id::unique())
-    }
-}
-
-impl From<Id> for widget::Id {
-    fn from(id: Id) -> Self {
-        id.0
     }
 }
 
