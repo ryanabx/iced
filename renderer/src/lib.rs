@@ -23,10 +23,9 @@ pub use geometry::Geometry;
 use crate::core::renderer;
 use crate::core::text::{self, Text};
 use crate::core::{
-    Background, Color, Font, Pixels, Point, Rectangle, Transformation,
+    Background, Color, Font, Pixels, Point, Rectangle, Transformation, Vector,
 };
-use crate::graphics::text::Editor;
-use crate::graphics::text::Paragraph;
+use crate::graphics::text::{Editor, Paragraph, Raw};
 use crate::graphics::Mesh;
 
 use std::borrow::Cow;
@@ -152,6 +151,7 @@ impl text::Renderer for Renderer {
     type Font = Font;
     type Paragraph = Paragraph;
     type Editor = Editor;
+    type Raw = Raw;
 
     const ICON_FONT: Font = iced_tiny_skia::Renderer::ICON_FONT;
     const CHECKMARK_ICON: char = iced_tiny_skia::Renderer::CHECKMARK_ICON;
@@ -197,6 +197,10 @@ impl text::Renderer for Renderer {
         );
     }
 
+    fn fill_raw(&mut self, raw: Self::Raw) {
+        delegate!(self, renderer, renderer.fill_raw(raw));
+    }
+
     fn fill_text(
         &mut self,
         text: Text<'_, Self::Font>,
@@ -228,8 +232,13 @@ impl crate::core::image::Renderer for Renderer {
         handle: crate::core::image::Handle,
         filter_method: crate::core::image::FilterMethod,
         bounds: Rectangle,
+        border_radius: [f32; 4],
     ) {
-        delegate!(self, renderer, renderer.draw(handle, filter_method, bounds));
+        delegate!(
+            self,
+            renderer,
+            renderer.draw(handle, filter_method, bounds, border_radius)
+        );
     }
 }
 
@@ -261,8 +270,8 @@ impl crate::graphics::geometry::Renderer for Renderer {
                         crate::Geometry::TinySkia(primitive) => {
                             renderer.draw_primitive(primitive);
                         }
-                        #[cfg(feature = "wgpu")]
-                        crate::Geometry::Wgpu(_) => unreachable!(),
+                        #[allow(unreachable_patterns)]
+                        _ => unreachable!(),
                     }
                 }
             }

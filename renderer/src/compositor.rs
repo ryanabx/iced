@@ -258,7 +258,7 @@ impl Candidate {
             }
             #[cfg(not(feature = "wgpu"))]
             Self::Wgpu => {
-                panic!("`wgpu` feature was not enabled in `iced_renderer`")
+                panic!("wgpu is not enabled")
             }
         }
     }

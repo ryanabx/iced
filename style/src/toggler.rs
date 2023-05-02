@@ -1,5 +1,5 @@
 //! Change the appearance of a toggler.
-use iced_core::Color;
+use iced_core::{border::Radius, Color};
 
 /// The appearance of a toggler.
 #[derive(Debug, Clone, Copy)]
@@ -15,7 +15,13 @@ pub struct Appearance {
     /// The width of the foreground border of the toggler.
     pub foreground_border_width: f32,
     /// The [`Color`] of the foreground border of the toggler.
-    pub foreground_border_color: Color,
+    pub foreground_border: Option<Color>,
+    /// The border radius of the toggler.
+    pub border_radius: Radius,
+    /// the radius of the handle of the toggler
+    pub handle_radius: Radius,
+    /// the space between the handle and the border of the toggler
+    pub handle_margin: f32,
 }
 
 /// A set of rules that dictate the style of a toggler.

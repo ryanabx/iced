@@ -2,6 +2,9 @@
 //!
 //! [`winit`]: https://github.com/rust-windowing/winit
 //! [`iced_runtime`]: https://github.com/iced-rs/iced/tree/0.12/runtime
+use winit::keyboard::SmolStr;
+use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
+
 use crate::core::keyboard;
 use crate::core::mouse;
 use crate::core::touch;
@@ -195,7 +198,7 @@ pub fn window_event(
                 }))
             }
         },
-        WindowEvent::KeyboardInput { event, .. } => Some(Event::Keyboard({
+        WindowEvent::KeyboardInput { event, .. } => {
             let logical_key = {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
@@ -211,58 +214,59 @@ pub fn window_event(
             };
 
             let text = {
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    use crate::core::SmolStr;
-                    use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
-
-                    event.text_with_all_modifiers().map(SmolStr::new)
-                }
-
-                #[cfg(target_arch = "wasm32")]
-                {
-                    // TODO: Fix inconsistent API on Wasm
-                    event.text
-                }
-            }.filter(|text| !text.as_str().chars().any(is_private_use));
-
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        use crate::core::SmolStr;
+                        use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
+                        event.text_with_all_modifiers().map(SmolStr::new)
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        // TODO: Fix inconsistent API on Wasm
+                        event.text
+                    }
+                }.filter(|text| !text.as_str().chars().any(is_private_use));
             let winit::event::KeyEvent {
                 state, location, ..
             } = event;
-            let key = key(logical_key);
-            let modifiers = self::modifiers(modifiers);
+            Some(Event::Keyboard({
+                let key = key(logical_key);
+                let modifiers = self::modifiers(modifiers);
 
-            let location = match location {
-                winit::keyboard::KeyLocation::Standard => {
-                    keyboard::Location::Standard
-                }
-                winit::keyboard::KeyLocation::Left => keyboard::Location::Left,
-                winit::keyboard::KeyLocation::Right => {
-                    keyboard::Location::Right
-                }
-                winit::keyboard::KeyLocation::Numpad => {
-                    keyboard::Location::Numpad
-                }
-            };
+                let location = match location {
+                    winit::keyboard::KeyLocation::Standard => {
+                        keyboard::Location::Standard
+                    }
+                    winit::keyboard::KeyLocation::Left => {
+                        keyboard::Location::Left
+                    }
+                    winit::keyboard::KeyLocation::Right => {
+                        keyboard::Location::Right
+                    }
+                    winit::keyboard::KeyLocation::Numpad => {
+                        keyboard::Location::Numpad
+                    }
+                };
 
-            match state {
-                winit::event::ElementState::Pressed => {
-                    keyboard::Event::KeyPressed {
-                        key,
-                        modifiers,
-                        location,
-                        text,
+                match state {
+                    winit::event::ElementState::Pressed => {
+                        keyboard::Event::KeyPressed {
+                            key,
+                            modifiers,
+                            location,
+                            text,
+                        }
+                    }
+                    winit::event::ElementState::Released => {
+                        keyboard::Event::KeyReleased {
+                            key,
+                            modifiers,
+                            location,
+                        }
                     }
                 }
-                winit::event::ElementState::Released => {
-                    keyboard::Event::KeyReleased {
-                        key,
-                        modifiers,
-                        location,
-                    }
-                }
-            }
-        })),
+            }))
+        }
         WindowEvent::ModifiersChanged(new_modifiers) => {
             Some(Event::Keyboard(keyboard::Event::ModifiersChanged(
                 self::modifiers(new_modifiers.state()),
@@ -843,4 +847,14 @@ pub fn icon(icon: window::Icon) -> Option<winit::window::Icon> {
 // See: https://en.wikipedia.org/wiki/Private_Use_Areas
 fn is_private_use(c: char) -> bool {
     ('\u{E000}'..='\u{F8FF}').contains(&c)
+}
+
+#[cfg(feature = "a11y")]
+pub(crate) fn a11y(
+    event: iced_accessibility::accesskit::ActionRequest,
+) -> Event {
+    // XXX
+    let id =
+        iced_runtime::core::id::Id::from(u128::from(event.target.0) as u64);
+    Event::A11y(id, event)
 }
