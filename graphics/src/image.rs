@@ -19,6 +19,9 @@ pub enum Image {
 
         /// The bounds of the image.
         bounds: Rectangle,
+
+        /// The border radii of the image
+        border_radius: [f32; 4],
     },
     /// A vector image.
     Vector {
@@ -30,6 +33,9 @@ pub enum Image {
 
         /// The bounds of the image.
         bounds: Rectangle,
+
+        /// The border radii of the image
+        border_radius: [f32; 4],
     },
 }
 
@@ -102,7 +108,9 @@ pub fn load(
 
     match handle.data() {
         image::Data::Path(path) => {
-            let image = ::image::open(path)?;
+            let image = ::image::io::Reader::open(&path)?
+                .with_guessed_format()?
+                .decode()?;
 
             let operation = std::fs::File::open(path)
                 .ok()

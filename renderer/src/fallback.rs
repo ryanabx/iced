@@ -77,11 +77,13 @@ where
         Font = A::Font,
         Paragraph = A::Paragraph,
         Editor = A::Editor,
+        Raw = A::Raw,
     >,
 {
     type Font = A::Font;
     type Paragraph = A::Paragraph;
     type Editor = A::Editor;
+    type Raw = A::Raw;
 
     const ICON_FONT: Self::Font = A::ICON_FONT;
     const CHECKMARK_ICON: char = A::CHECKMARK_ICON;
@@ -123,6 +125,10 @@ where
         );
     }
 
+    fn fill_raw(&mut self, raw: Self::Raw) {
+        delegate!(self, renderer, renderer.fill_raw(raw));
+    }
+
     fn fill_text(
         &mut self,
         text: core::Text<String, Self::Font>,
@@ -154,11 +160,12 @@ where
         handle: Self::Handle,
         filter_method: image::FilterMethod,
         bounds: Rectangle,
+        border_radius: [f32; 4],
     ) {
         delegate!(
             self,
             renderer,
-            renderer.draw_image(handle, filter_method, bounds)
+            renderer.draw_image(handle, filter_method, bounds, border_radius)
         );
     }
 }

@@ -38,6 +38,7 @@ where
         application: &A,
         compositor: &mut C,
         exit_on_close_request: bool,
+        resize_border: u32,
     ) -> &mut Window<A, C> {
         let state = State::new(application, id, &window);
         let viewport_version = state.viewport_version();
@@ -51,6 +52,11 @@ where
 
         let _ = self.aliases.insert(window.id(), id);
 
+        let drag_resize_window_func = super::drag_resize::event_func(
+            &window,
+            resize_border as f64 * window.scale_factor(),
+        );
+
         let _ = self.entries.insert(
             id,
             Window {
@@ -58,9 +64,11 @@ where
                 state,
                 viewport_version,
                 exit_on_close_request,
+                drag_resize_window_func,
                 surface,
                 renderer,
                 mouse_interaction: mouse::Interaction::Idle,
+                prev_dnd_destination_rectangles_count: 0,
             },
         );
 
@@ -126,6 +134,15 @@ where
     pub state: State<A>,
     pub viewport_version: u64,
     pub exit_on_close_request: bool,
+    pub drag_resize_window_func: Option<
+        Box<
+            dyn FnMut(
+                &winit::window::Window,
+                &winit::event::WindowEvent,
+            ) -> bool,
+        >,
+    >,
+    pub prev_dnd_destination_rectangles_count: usize,
     pub mouse_interaction: mouse::Interaction,
     pub surface: C::Surface,
     pub renderer: A::Renderer,
