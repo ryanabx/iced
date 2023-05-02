@@ -1,4 +1,6 @@
 use crate::container;
+use iced_renderer::core::widget::OperationOutputWrapper;
+
 use crate::core::event::{self, Event};
 use crate::core::layout;
 use crate::core::mouse;
@@ -72,8 +74,8 @@ where
         self.content.as_widget().children()
     }
 
-    fn diff(&self, tree: &mut Tree) {
-        self.content.as_widget().diff(tree);
+    fn diff(&mut self, tree: &mut Tree) {
+        self.content.as_widget_mut().diff(tree);
     }
 
     fn size(&self) -> Size<Length> {
@@ -94,7 +96,7 @@ where
         tree: &mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn Operation<Message>,
+        operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
     ) {
         self.content
             .as_widget()
@@ -135,7 +137,7 @@ where
         tree: &Tree,
         renderer: &mut Renderer,
         _theme: &AnyTheme,
-        _style: &renderer::Style,
+        style: &renderer::Style,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
         viewport: &Rectangle,
@@ -159,9 +161,7 @@ where
             tree,
             renderer,
             &self.theme,
-            &renderer::Style {
-                text_color: appearance.text_color,
-            },
+            style, // TODO(POP): Is this correct? Was originally a custom struct
             layout,
             cursor,
             viewport,
@@ -223,7 +223,7 @@ where
                 &mut self,
                 layout: Layout<'_>,
                 renderer: &Renderer,
-                operation: &mut dyn Operation<Message>,
+                operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
             ) {
                 self.content.operate(layout, renderer, operation);
             }

@@ -4,6 +4,8 @@ use crate::core::{Background, Border, Color, Pixels, Shadow};
 /// The appearance of a container.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Appearance {
+    /// The icon [`Color`] of the container.
+    pub icon_color: Option<Color>,
     /// The text [`Color`] of the container.
     pub text_color: Option<Color>,
     /// The [`Background`] of the container.
@@ -36,6 +38,8 @@ impl Appearance {
     pub fn with_background(self, background: impl Into<Background>) -> Self {
         Self {
             background: Some(background.into()),
+            icon_color: None,
+            text_color: None,
             ..self
         }
     }
