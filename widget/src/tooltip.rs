@@ -123,10 +123,6 @@ where
         ]
     }
 
-    fn diff(&self, tree: &mut widget::Tree) {
-        tree.diff_children(&[self.content.as_widget(), &self.tooltip]);
-    }
-
     fn state(&self) -> widget::tree::State {
         widget::tree::State::new(State::default())
     }
@@ -137,6 +133,13 @@ where
 
     fn size(&self) -> Size<Length> {
         self.content.as_widget().size()
+    }
+
+    fn diff(&mut self, tree: &mut crate::core::widget::Tree) {
+        tree.diff_children(&mut [
+            self.content.as_widget_mut(),
+            &mut self.tooltip,
+        ])
     }
 
     fn layout(
@@ -445,7 +448,9 @@ where
         container::draw_background(renderer, &style, layout.bounds());
 
         let defaults = renderer::Style {
+            icon_color: inherited_style.icon_color,
             text_color: style.text_color.unwrap_or(inherited_style.text_color),
+            scale_factor: inherited_style.scale_factor,
         };
 
         Widget::<(), Theme, Renderer>::draw(

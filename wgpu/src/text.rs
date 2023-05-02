@@ -193,13 +193,16 @@ impl Pipeline {
                             return None;
                         };
 
-                        let (width, height) = buffer.size();
+                        let (width_opt, height_opt) = buffer.size();
 
                         (
                             buffer.as_ref(),
                             Rectangle::new(
                                 text.position,
-                                Size::new(width, height),
+                                Size::new(
+                                    width_opt.unwrap_or(0.0),
+                                    height_opt.unwrap_or(0.0),
+                                ),
                             ),
                             alignment::Horizontal::Left,
                             alignment::Vertical::Top,

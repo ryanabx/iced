@@ -24,6 +24,7 @@ pub use configuration::Configuration;
 pub use content::Content;
 pub use direction::Direction;
 pub use draggable::Draggable;
+use iced_renderer::core::widget::{Operation, OperationOutputWrapper};
 pub use node::Node;
 pub use pane::Pane;
 pub use split::Split;
@@ -39,7 +40,6 @@ use crate::core::mouse;
 use crate::core::overlay::{self, Group};
 use crate::core::renderer;
 use crate::core::touch;
-use crate::core::widget;
 use crate::core::widget::tree::{self, Tree};
 use crate::core::{
     Clipboard, Element, Layout, Length, Pixels, Point, Rectangle, Shell, Size,
@@ -111,6 +111,7 @@ pub struct PaneGrid<
     spacing: f32,
     on_click: Option<Box<dyn Fn(Pane) -> Message + 'a>>,
     on_drag: Option<Box<dyn Fn(DragEvent) -> Message + 'a>>,
+    #[allow(clippy::type_complexity)]
     on_resize: Option<(f32, Box<dyn Fn(ResizeEvent) -> Message + 'a>)>,
     style: <Theme as StyleSheet>::Style,
 }
@@ -254,15 +255,20 @@ where
             .collect()
     }
 
-    fn diff(&self, tree: &mut Tree) {
-        match &self.contents {
-            Contents::All(contents, _) => tree.diff_children_custom(
-                contents,
-                |state, (_, content)| content.diff(state),
-                |(_, content)| content.state(),
-            ),
+    fn diff(&mut self, tree: &mut Tree) {
+        match &mut self.contents {
+            Contents::All(contents, _) => {
+                let ids = contents.iter().map(|_| None).collect(); // TODO
+                tree.diff_children_custom(
+                    contents,
+                    ids,
+                    |state, (_, content)| content.diff(state),
+                    |(_, content)| content.state(),
+                )
+            }
             Contents::Maximized(_, content, _) => tree.diff_children_custom(
-                &[content],
+                &mut [content],
+                vec![None], // TODO
                 |state, content| content.diff(state),
                 |content| content.state(),
             ),
@@ -302,7 +308,7 @@ where
         tree: &mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn widget::Operation<Message>,
+        operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
     ) {
         operation.container(None, layout.bounds(), &mut |operation| {
             self.contents
@@ -529,7 +535,10 @@ pub fn update<'a, Message, T: Draggable>(
     contents: impl Iterator<Item = (Pane, T)>,
     on_click: &Option<Box<dyn Fn(Pane) -> Message + 'a>>,
     on_drag: &Option<Box<dyn Fn(DragEvent) -> Message + 'a>>,
-    on_resize: &Option<(f32, Box<dyn Fn(ResizeEvent) -> Message + 'a>)>,
+    #[allow(clippy::type_complexity)] on_resize: &Option<(
+        f32,
+        Box<dyn Fn(ResizeEvent) -> Message + 'a>,
+    )>,
 ) -> event::Status {
     const DRAG_DEADBAND_DISTANCE: f32 = 10.0;
 

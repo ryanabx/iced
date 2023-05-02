@@ -1,3 +1,5 @@
+use iced_renderer::core::widget::OperationOutputWrapper;
+
 use crate::core::event::{self, Event};
 use crate::core::layout;
 use crate::core::mouse;
@@ -57,8 +59,8 @@ where
         self.content.as_widget().children()
     }
 
-    fn diff(&self, tree: &mut Tree) {
-        self.content.as_widget().diff(tree);
+    fn diff(&mut self, tree: &mut Tree) {
+        self.content.as_widget_mut().diff(tree);
     }
 
     fn size(&self) -> Size<Length> {
@@ -79,7 +81,7 @@ where
         tree: &mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn Operation<Message>,
+        operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
     ) {
         self.content
             .as_widget()
@@ -196,7 +198,7 @@ where
                 &mut self,
                 layout: Layout<'_>,
                 renderer: &Renderer,
-                operation: &mut dyn Operation<Message>,
+                operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
             ) {
                 self.content.operate(layout, renderer, operation);
             }

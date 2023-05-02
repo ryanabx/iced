@@ -44,10 +44,8 @@ use crate::{Application, Command, Element, Error, Settings, Subscription};
 /// [`styling`]: https://github.com/iced-rs/iced/tree/0.10/examples/styling
 /// [`svg`]: https://github.com/iced-rs/iced/tree/0.10/examples/svg
 /// [`tour`]: https://github.com/iced-rs/iced/tree/0.10/examples/tour
-/// [`Canvas widget`]: crate::widget::Canvas
 /// [the overview]: index.html#overview
 /// [`iced_wgpu`]: https://github.com/iced-rs/iced/tree/0.10/wgpu
-/// [`Svg` widget]: crate::widget::Svg
 /// [Ghostscript Tiger]: https://commons.wikimedia.org/wiki/File:Ghostscript_Tiger.svg
 ///
 /// ## A simple "Hello, world!"
@@ -86,7 +84,7 @@ use crate::{Application, Command, Element, Error, Settings, Subscription};
 /// ```
 pub trait Sandbox {
     /// The type of __messages__ your [`Sandbox`] will produce.
-    type Message: std::fmt::Debug + Send;
+    type Message: std::fmt::Debug + Send + Sync + 'static;
 
     /// Initializes the [`Sandbox`].
     ///
@@ -157,6 +155,7 @@ pub trait Sandbox {
 impl<T> Application for T
 where
     T: Sandbox,
+    T::Message: Send + Sync + 'static,
 {
     type Executor = iced_futures::backend::null::Executor;
     type Flags = ();

@@ -226,7 +226,9 @@ mod modal {
     use iced::advanced::layout::{self, Layout};
     use iced::advanced::overlay;
     use iced::advanced::renderer;
-    use iced::advanced::widget::{self, Widget};
+    use iced::advanced::widget::{
+        self, Operation, OperationOutputWrapper, Widget,
+    };
     use iced::advanced::{self, Clipboard, Shell};
     use iced::alignment::Alignment;
     use iced::event;
@@ -276,8 +278,8 @@ mod modal {
             ]
         }
 
-        fn diff(&self, tree: &mut widget::Tree) {
-            tree.diff_children(&[&self.base, &self.modal]);
+        fn diff(&mut self, tree: &mut widget::Tree) {
+            tree.diff_children(&mut [&mut self.base, &mut self.modal]);
         }
 
         fn size(&self) -> Size<Length> {
@@ -380,7 +382,7 @@ mod modal {
             state: &mut widget::Tree,
             layout: Layout<'_>,
             renderer: &Renderer,
-            operation: &mut dyn widget::Operation<Message>,
+            operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
         ) {
             self.base.as_widget().operate(
                 &mut state.children[0],
@@ -495,7 +497,7 @@ mod modal {
             &mut self,
             layout: Layout<'_>,
             renderer: &Renderer,
-            operation: &mut dyn widget::Operation<Message>,
+            operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
         ) {
             self.content.as_widget().operate(
                 self.tree,

@@ -1,7 +1,7 @@
 //! Use the built-in theme and styles.
 pub mod palette;
 
-pub use palette::Palette;
+pub use self::palette::Palette;
 
 use crate::application;
 use crate::button;
@@ -16,12 +16,14 @@ use crate::radio;
 use crate::rule;
 use crate::scrollable;
 use crate::slider;
+use crate::slider::RailBackground;
 use crate::svg;
 use crate::text_editor;
 use crate::text_input;
 use crate::toggler;
 
-use crate::core::{Background, Border, Color, Shadow, Vector};
+use iced_core::border::Radius;
+use iced_core::{Background, Border, Color, Shadow, Vector};
 
 use std::fmt;
 use std::rc::Rc;
@@ -140,6 +142,7 @@ impl application::StyleSheet for Theme {
         match style {
             Application::Default => application::Appearance {
                 background_color: palette.background.base.color,
+                icon_color: palette.background.base.icon,
                 text_color: palette.background.base.text,
             },
             Application::Custom(custom) => custom.appearance(self),
@@ -431,6 +434,7 @@ impl container::StyleSheet for Theme {
                 let palette = self.extended_palette();
 
                 container::Appearance {
+                    icon_color: None,
                     text_color: None,
                     background: Some(palette.background.weak.color.into()),
                     border: Border::with_radius(2),
@@ -470,6 +474,7 @@ impl slider::StyleSheet for Theme {
 
                 let handle = slider::Handle {
                     shape: slider::HandleShape::Rectangle {
+                        height: 8,
                         width: 8,
                         border_radius: 4.0.into(),
                     },
@@ -480,7 +485,7 @@ impl slider::StyleSheet for Theme {
 
                 slider::Appearance {
                     rail: slider::Rail {
-                        colors: (
+                        colors: RailBackground::Pair(
                             palette.primary.base.color,
                             palette.secondary.base.color,
                         ),
@@ -491,6 +496,9 @@ impl slider::StyleSheet for Theme {
                         color: palette.background.base.color,
                         border_color: palette.primary.base.color,
                         ..handle
+                    },
+                    breakpoint: slider::Breakpoint {
+                        color: palette.background.weak.text,
                     },
                 }
             }
@@ -728,6 +736,9 @@ impl toggler::StyleSheet for Theme {
                         palette.background.base.color
                     },
                     foreground_border: None,
+                    border_radius: Radius::from(8.0),
+                    handle_radius: Radius::from(8.0),
+                    handle_margin: 2.0,
                 }
             }
             Toggler::Custom(custom) => custom.active(self, is_active),

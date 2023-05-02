@@ -74,8 +74,8 @@ impl<'a> Layer<'a> {
                 font: Font::MONOSPACE,
                 horizontal_alignment: alignment::Horizontal::Left,
                 vertical_alignment: alignment::Vertical::Top,
-                shaping: core::text::Shaping::Basic,
                 clip_bounds: Rectangle::with_size(Size::INFINITY),
+                shaping: core::text::Shaping::Advanced,
             };
 
             overlay.text.push(Text::Cached(text.clone()));
@@ -220,6 +220,7 @@ impl<'a> Layer<'a> {
                 handle,
                 filter_method,
                 bounds,
+                border_radius,
             } => {
                 let layer = &mut layers[current_layer];
 
@@ -227,6 +228,7 @@ impl<'a> Layer<'a> {
                     handle: handle.clone(),
                     filter_method: *filter_method,
                     bounds: *bounds + translation,
+                    border_radius: *border_radius,
                 });
             }
             Primitive::Svg {

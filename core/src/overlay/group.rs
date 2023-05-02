@@ -3,7 +3,9 @@ use crate::layout;
 use crate::mouse;
 use crate::overlay;
 use crate::renderer;
-use crate::widget;
+
+use crate::widget::Operation;
+use crate::widget::OperationOutputWrapper;
 use crate::{
     Clipboard, Event, Layout, Overlay, Point, Rectangle, Shell, Size, Vector,
 };
@@ -140,7 +142,7 @@ where
         &mut self,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn widget::Operation<Message>,
+        operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
     ) {
         operation.container(None, layout.bounds(), &mut |operation| {
             self.children.iter_mut().zip(layout.children()).for_each(

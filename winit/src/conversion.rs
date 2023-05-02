@@ -2,6 +2,9 @@
 //!
 //! [`winit`]: https://github.com/rust-windowing/winit
 //! [`iced_runtime`]: https://github.com/iced-rs/iced/tree/0.10/runtime
+use winit::keyboard::SmolStr;
+use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
+
 use crate::core::keyboard;
 use crate::core::mouse;
 use crate::core::touch;
@@ -195,51 +198,54 @@ pub fn window_event(
                 }))
             }
         },
-        WindowEvent::KeyboardInput {
-            event:
-                winit::event::KeyEvent {
-                    logical_key,
-                    state,
-                    text,
-                    location,
-                    ..
-                },
-            ..
-        } => Some(Event::Keyboard({
-            let key = key(logical_key);
-            let modifiers = self::modifiers(modifiers);
+        WindowEvent::KeyboardInput { event, .. } => {
+            let text_with_modifiers =
+                event.text_with_all_modifiers().map(|t| SmolStr::new(t));
+            let winit::event::KeyEvent {
+                logical_key,
+                state,
+                text: _text,
+                location,
+                ..
+            } = event;
+            Some(Event::Keyboard({
+                let key = key(logical_key);
+                let modifiers = self::modifiers(modifiers);
 
-            let location = match location {
-                winit::keyboard::KeyLocation::Standard => {
-                    keyboard::Location::Standard
-                }
-                winit::keyboard::KeyLocation::Left => keyboard::Location::Left,
-                winit::keyboard::KeyLocation::Right => {
-                    keyboard::Location::Right
-                }
-                winit::keyboard::KeyLocation::Numpad => {
-                    keyboard::Location::Numpad
-                }
-            };
+                let location = match location {
+                    winit::keyboard::KeyLocation::Standard => {
+                        keyboard::Location::Standard
+                    }
+                    winit::keyboard::KeyLocation::Left => {
+                        keyboard::Location::Left
+                    }
+                    winit::keyboard::KeyLocation::Right => {
+                        keyboard::Location::Right
+                    }
+                    winit::keyboard::KeyLocation::Numpad => {
+                        keyboard::Location::Numpad
+                    }
+                };
 
-            match state {
-                winit::event::ElementState::Pressed => {
-                    keyboard::Event::KeyPressed {
-                        key,
-                        modifiers,
-                        location,
-                        text,
+                match state {
+                    winit::event::ElementState::Pressed => {
+                        keyboard::Event::KeyPressed {
+                            key,
+                            modifiers,
+                            location,
+                            text: text_with_modifiers,
+                        }
+                    }
+                    winit::event::ElementState::Released => {
+                        keyboard::Event::KeyReleased {
+                            key,
+                            modifiers,
+                            location,
+                        }
                     }
                 }
-                winit::event::ElementState::Released => {
-                    keyboard::Event::KeyReleased {
-                        key,
-                        modifiers,
-                        location,
-                    }
-                }
-            }
-        })),
+            }))
+        }
         WindowEvent::ModifiersChanged(new_modifiers) => {
             Some(Event::Keyboard(keyboard::Event::ModifiersChanged(
                 self::modifiers(new_modifiers.state()),
@@ -814,4 +820,14 @@ pub fn icon(icon: window::Icon) -> Option<winit::window::Icon> {
     let (pixels, size) = icon.into_raw();
 
     winit::window::Icon::from_rgba(pixels, size.width, size.height).ok()
+}
+
+#[cfg(feature = "a11y")]
+pub(crate) fn a11y(
+    event: iced_accessibility::accesskit::ActionRequest,
+) -> Event {
+    // XXX
+    let id =
+        iced_runtime::core::id::Id::from(u128::from(event.target.0) as u64);
+    Event::A11y(id, event)
 }

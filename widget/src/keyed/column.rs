@@ -1,4 +1,6 @@
 //! Distribute content vertically.
+use iced_renderer::core::widget::OperationOutputWrapper;
+
 use crate::core::event::{self, Event};
 use crate::core::layout;
 use crate::core::mouse;
@@ -163,7 +165,7 @@ where
         self.children.iter().map(Tree::new).collect()
     }
 
-    fn diff(&self, tree: &mut Tree) {
+    fn diff(&mut self, tree: &mut Tree) {
         let Tree {
             state, children, ..
         } = tree;
@@ -172,8 +174,8 @@ where
 
         tree::diff_children_custom_with_search(
             children,
-            &self.children,
-            |tree, child| child.as_widget().diff(tree),
+            &mut self.children,
+            |tree, child| child.as_widget_mut().diff(tree),
             |index| {
                 self.keys.get(index).or_else(|| self.keys.last()).copied()
                     != Some(state.keys[index])
@@ -182,7 +184,7 @@ where
         );
 
         if state.keys != self.keys {
-            state.keys = self.keys.clone();
+            state.keys.clone_from(&self.keys);
         }
     }
 
@@ -223,7 +225,7 @@ where
         tree: &mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
-        operation: &mut dyn Operation<Message>,
+        operation: &mut dyn Operation<OperationOutputWrapper<Message>>,
     ) {
         operation.container(None, layout.bounds(), &mut |operation| {
             self.children

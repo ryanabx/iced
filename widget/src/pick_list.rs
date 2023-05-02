@@ -1,4 +1,6 @@
 //! Display a dropdown list of selectable values.
+use iced_renderer::core::text::LineHeight;
+
 use crate::container;
 use crate::core::alignment;
 use crate::core::event::{self, Event};
@@ -43,6 +45,7 @@ pub struct PickList<
     text_size: Option<Pixels>,
     text_line_height: text::LineHeight,
     text_shaping: text::Shaping,
+    text_wrap: text::Wrap,
     font: Option<Renderer::Font>,
     handle: Handle<Renderer::Font>,
     style: Theme::Style,
@@ -79,7 +82,8 @@ where
             padding: Self::DEFAULT_PADDING,
             text_size: None,
             text_line_height: text::LineHeight::default(),
-            text_shaping: text::Shaping::Basic,
+            text_shaping: text::Shaping::Advanced,
+            text_wrap: text::Wrap::default(),
             font: None,
             handle: Handle::default(),
             style: Default::default(),
@@ -122,6 +126,12 @@ where
     /// Sets the [`text::Shaping`] strategy of the [`PickList`].
     pub fn text_shaping(mut self, shaping: text::Shaping) -> Self {
         self.text_shaping = shaping;
+        self
+    }
+
+    /// Sets the [`text::Wrap`] mode of the [`PickList`].
+    pub fn text_wrap(mut self, wrap: text::Wrap) -> Self {
+        self.text_wrap = wrap;
         self
     }
 
@@ -190,6 +200,7 @@ where
             self.text_size,
             self.text_line_height,
             self.text_shaping,
+            self.text_wrap,
             self.font,
             self.placeholder.as_deref(),
             &self.options,
@@ -250,6 +261,7 @@ where
             self.text_size,
             self.text_line_height,
             self.text_shaping,
+            self.text_wrap,
             font,
             self.placeholder.as_deref(),
             self.selected.as_ref(),
@@ -274,6 +286,7 @@ where
             self.padding,
             self.text_size,
             self.text_shaping,
+            self.text_wrap,
             self.font.unwrap_or_else(|| renderer.default_font()),
             &self.options,
             &self.on_selected,
@@ -375,6 +388,8 @@ pub struct Icon<Font> {
     pub line_height: text::LineHeight,
     /// The shaping strategy of the icon.
     pub shaping: text::Shaping,
+    /// The wrap mode of the icon.
+    pub wrap: text::Wrap,
 }
 
 /// Computes the layout of a [`PickList`].
@@ -387,6 +402,7 @@ pub fn layout<Renderer, T>(
     text_size: Option<Pixels>,
     text_line_height: text::LineHeight,
     text_shaping: text::Shaping,
+    text_wrap: text::Wrap,
     font: Option<Renderer::Font>,
     placeholder: Option<&str>,
     options: &[T],
@@ -414,6 +430,7 @@ where
         horizontal_alignment: alignment::Horizontal::Left,
         vertical_alignment: alignment::Vertical::Center,
         shaping: text_shaping,
+        wrap: text_wrap,
     };
 
     for (option, paragraph) in options.iter().zip(state.options.iter_mut()) {
@@ -577,6 +594,7 @@ pub fn overlay<'a, T, Message, Theme, Renderer>(
     padding: Padding,
     text_size: Option<Pixels>,
     text_shaping: text::Shaping,
+    text_wrap: text::Wrap,
     font: Renderer::Font,
     options: &'a [T],
     on_selected: &'a dyn Fn(T) -> Message,
@@ -611,6 +629,7 @@ where
         .padding(padding)
         .font(font)
         .text_shaping(text_shaping)
+        .text_wrap(text_wrap)
         .style(style);
 
         if let Some(text_size) = text_size {
@@ -633,6 +652,7 @@ pub fn draw<'a, T, Theme, Renderer>(
     text_size: Option<Pixels>,
     text_line_height: text::LineHeight,
     text_shaping: text::Shaping,
+    text_wrap: text::Wrap,
     font: Renderer::Font,
     placeholder: Option<&str>,
     selected: Option<&T>,
@@ -669,8 +689,9 @@ pub fn draw<'a, T, Theme, Renderer>(
             Renderer::ICON_FONT,
             Renderer::ARROW_DOWN_ICON,
             *size,
-            text::LineHeight::default(),
-            text::Shaping::Basic,
+            LineHeight::default(),
+            text::Shaping::Advanced,
+            text::Wrap::default(),
         )),
         Handle::Static(Icon {
             font,
@@ -678,7 +699,8 @@ pub fn draw<'a, T, Theme, Renderer>(
             size,
             line_height,
             shaping,
-        }) => Some((*font, *code_point, *size, *line_height, *shaping)),
+            wrap,
+        }) => Some((*font, *code_point, *size, *line_height, *shaping, *wrap)),
         Handle::Dynamic { open, closed } => {
             if state().is_open {
                 Some((
@@ -687,6 +709,7 @@ pub fn draw<'a, T, Theme, Renderer>(
                     open.size,
                     open.line_height,
                     open.shaping,
+                    open.wrap,
                 ))
             } else {
                 Some((
@@ -695,13 +718,14 @@ pub fn draw<'a, T, Theme, Renderer>(
                     closed.size,
                     closed.line_height,
                     closed.shaping,
+                    closed.wrap,
                 ))
             }
         }
         Handle::None => None,
     };
 
-    if let Some((font, code_point, size, line_height, shaping)) = handle {
+    if let Some((font, code_point, size, line_height, shaping, wrap)) = handle {
         let size = size.unwrap_or_else(|| renderer.default_size());
 
         renderer.fill_text(
@@ -717,6 +741,7 @@ pub fn draw<'a, T, Theme, Renderer>(
                 horizontal_alignment: alignment::Horizontal::Right,
                 vertical_alignment: alignment::Vertical::Center,
                 shaping,
+                wrap,
             },
             Point::new(
                 bounds.x + bounds.width - padding.horizontal(),
@@ -745,6 +770,7 @@ pub fn draw<'a, T, Theme, Renderer>(
                 horizontal_alignment: alignment::Horizontal::Left,
                 vertical_alignment: alignment::Vertical::Center,
                 shaping: text_shaping,
+                wrap: text_wrap,
             },
             Point::new(bounds.x + padding.left, bounds.center_y()),
             if is_selected {
