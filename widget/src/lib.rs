@@ -137,3 +137,7 @@ pub use qr_code::QRCode;
 
 pub use renderer::Renderer;
 pub use style::theme::{self, Theme};
+#[cfg(feature = "wayland")]
+pub mod dnd_listener;
+#[cfg(feature = "wayland")]
+pub mod dnd_source;
