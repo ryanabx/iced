@@ -18,7 +18,7 @@ all-features = true
 maintenance = { status = "actively-developed" }
 
 [features]
-default = ["wgpu", "fira-sans"]
+default = ["wgpu", "fira-sans", "winit", "multi-window", "a11y"]
 # Enable the `wgpu` GPU-accelerated renderer backend
 wgpu = ["iced_renderer/wgpu", "iced_widget/wgpu"]
 # Enables the `Image` widget
@@ -55,6 +55,10 @@ multi-window = ["iced_winit/multi-window"]
 advanced = []
 # Enables embedding Fira Sans as the default font on Wasm builds
 fira-sans = ["iced_renderer/fira-sans"]
+# Enables the `accesskit` accessibility library
+a11y = ["iced_accessibility", "iced_core/a11y", "iced_widget/a11y", "iced_winit?/a11y"]
+# Enables the winit shell. Conflicts with `wayland` and `glutin`.
+winit = ["iced_winit", "iced_accessibility?/accesskit_winit"]
 
 [dependencies]
 iced_core.workspace = true
@@ -63,14 +67,32 @@ iced_renderer.workspace = true
 iced_widget.workspace = true
 iced_winit.features = ["application"]
 iced_winit.workspace = true
-
+iced_winit.optional = true
 iced_highlighter.workspace = true
 iced_highlighter.optional = true
-
+iced_accessibility.workspace = true
+iced_accessibility.optional = true
 thiserror.workspace = true
 
 image.workspace = true
 image.optional = true
+
+
+[workspace]
+members = [
+    "core",
+    "futures",
+    "graphics",
+    "runtime",
+    "renderer",
+    "style",
+    "tiny_skia",
+    "wgpu",
+    "widget",
+    "winit",
+    "examples/*",
+    "accessibility",
+]
 
 [profile.release-opt]
 inherits = "release"
@@ -81,22 +103,6 @@ incremental = false
 opt-level = 3
 overflow-checks = false
 strip = "debuginfo"
-
-[workspace]
-members = [
-    "core",
-    "futures",
-    "graphics",
-    "highlighter",
-    "renderer",
-    "runtime",
-    "style",
-    "tiny_skia",
-    "wgpu",
-    "widget",
-    "winit",
-    "examples/*",
-]
 
 [workspace.package]
 version = "0.13.0-dev"
@@ -120,7 +126,8 @@ iced_style = { version = "0.13.0-dev", path = "style" }
 iced_tiny_skia = { version = "0.13.0-dev", path = "tiny_skia" }
 iced_wgpu = { version = "0.13.0-dev", path = "wgpu" }
 iced_widget = { version = "0.13.0-dev", path = "widget" }
-iced_winit = { version = "0.13.0-dev", path = "winit" }
+iced_winit = { version = "0.13.0-dev", path = "winit", features = ["application"] }
+iced_accessibility = { version = "0.1", path = "accessibility" }
 
 async-std = "1.0"
 bitflags = "2.0"

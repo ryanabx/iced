@@ -10,6 +10,9 @@ homepage.workspace = true
 categories.workspace = true
 keywords.workspace = true
 
+[features]
+a11y = ["iced_accessibility"]
+
 [dependencies]
 bitflags.workspace = true
 glam.workspace = true
@@ -28,3 +31,7 @@ raw-window-handle.workspace = true
 
 [dev-dependencies]
 approx = "0.5"
+[dependencies.iced_accessibility]
+version = "0.1.0"
+path = "../accessibility"
+optional = true

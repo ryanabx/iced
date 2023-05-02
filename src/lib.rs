@@ -193,7 +193,7 @@ pub use crate::core::border;
 pub use crate::core::color;
 pub use crate::core::gradient;
 pub use crate::core::{
-    Alignment, Background, Border, Color, ContentFit, Degrees, Gradient,
+    id, Alignment, Background, Border, Color, ContentFit, Degrees, Gradient,
     Length, Padding, Pixels, Point, Radians, Rectangle, Shadow, Size,
     Transformation, Vector,
 };
