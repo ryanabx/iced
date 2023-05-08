@@ -1,16 +1,14 @@
 //! Display fields that can be filled with text.
 //!
 //! A [`TextInput`] has some local [`State`].
-mod editor;
-mod value;
+pub use super::cursor::Cursor;
+pub use super::value::Value;
 
-pub mod cursor;
-
-pub use cursor::Cursor;
+use super::cursor;
+use super::editor;
+use super::editor::Editor;
+use super::value;
 use iced_renderer::core::widget::OperationOutputWrapper;
-pub use value::Value;
-
-use editor::Editor;
 
 use crate::core::alignment;
 use crate::core::clipboard::{self, Clipboard};

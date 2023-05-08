@@ -154,7 +154,7 @@ where
         self.clip = clip;
         self
     }
-    
+
     /// Sets the [`Id`] of the [`Button`].
     pub fn id(mut self, id: Id) -> Self {
         self.id = id;
@@ -572,7 +572,8 @@ pub fn update<'a, Message: Clone>(
                 }
             }
         }
-        Event::Touch(touch::Event::FingerLost { .. }) => {
+        Event::Touch(touch::Event::FingerLost { .. })
+        | Event::Mouse(mouse::Event::CursorLeft) => {
             let state = state();
             state.is_hovered = false;
             state.is_pressed = false;

@@ -18,7 +18,9 @@ use crate::core::{
 };
 use crate::runtime::Command;
 
-pub use crate::style::scrollable::{Appearance, Scrollbar, Scroller, StyleSheet};
+pub use crate::style::scrollable::{
+    Appearance, Scrollbar, Scroller, StyleSheet,
+};
 use iced_renderer::core::widget::OperationOutputWrapper;
 pub use operation::scrollable::{AbsoluteOffset, RelativeOffset};
 
