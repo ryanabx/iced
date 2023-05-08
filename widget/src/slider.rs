@@ -15,12 +15,15 @@ use crate::core::{
     Shell, Size, Widget,
 };
 
-use std::borrow::Cow;
 use std::ops::RangeInclusive;
 
+use iced_renderer::core::border::Radius;
 pub use iced_style::slider::{
     Appearance, Handle, HandleShape, Rail, StyleSheet,
 };
+
+#[cfg(feature = "a11y")]
+use std::borrow::Cow;
 
 /// An horizontal bar and a handle that selects a single value from a range of
 /// values.
@@ -581,16 +584,35 @@ pub fn draw<T, Theme, Renderer>(
     } else {
         theme.active(style)
     };
+    let border_width = style
+        .handle
+        .border_width
+        .min(bounds.height / 2.0)
+        .min(bounds.width / 2.0);
 
     let (handle_width, handle_height, handle_border_radius) =
         match style.handle.shape {
             HandleShape::Circle { radius } => {
-                (radius * 2.0, radius * 2.0, radius.into())
+                let radius = (radius)
+                    .max(2.0 * border_width)
+                    .min(bounds.height / 2.0)
+                    .min(bounds.width / 2.0);
+                (radius * 2.0, radius * 2.0, Radius::from(radius))
             }
             HandleShape::Rectangle {
                 width,
                 border_radius,
-            } => (f32::from(width), bounds.height, border_radius),
+            } => {
+                let width = (f32::from(width))
+                    .max(2.0 * border_width)
+                    .min(bounds.width);
+                let height = bounds.height;
+                let mut border_radius: [f32; 4] = border_radius.into();
+                for r in &mut border_radius {
+                    *r = (*r).min(height / 2.0).min(width / 2.0).max(0.0);
+                }
+                (width, height, border_radius.into())
+            }
         };
 
     let value = value.into() as f32;
@@ -609,6 +631,7 @@ pub fn draw<T, Theme, Renderer>(
 
     let rail_y = bounds.y + bounds.height / 2.0;
 
+    // rail
     renderer.fill_quad(
         renderer::Quad {
             bounds: Rectangle {
@@ -623,6 +646,7 @@ pub fn draw<T, Theme, Renderer>(
         style.rail.colors.0,
     );
 
+    // right rail
     renderer.fill_quad(
         renderer::Quad {
             bounds: Rectangle {
@@ -637,11 +661,12 @@ pub fn draw<T, Theme, Renderer>(
         style.rail.colors.1,
     );
 
+    // handle
     renderer.fill_quad(
         renderer::Quad {
             bounds: Rectangle {
                 x: bounds.x + offset,
-                y: rail_y - handle_height / 2.0,
+                y: rail_y - (handle_height / 2.0),
                 width: handle_width,
                 height: handle_height,
             },

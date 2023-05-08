@@ -1,4 +1,6 @@
 //! Build interactive cross-platform applications.
+use iced_core::window::Id;
+
 use crate::{Command, Element, Executor, Settings, Subscription};
 
 pub use crate::style::application::{Appearance, StyleSheet};

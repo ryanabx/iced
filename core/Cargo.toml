@@ -12,6 +12,7 @@ keywords.workspace = true
 
 [features]
 a11y = ["iced_accessibility"]
+wayland = ["iced_accessibility?/accesskit_unix", "sctk"]
 
 [dependencies]
 bitflags.workspace = true
@@ -22,7 +23,10 @@ smol_str.workspace = true
 thiserror.workspace = true
 web-time.workspace = true
 xxhash-rust.workspace = true
+window_clipboard.workspace = true
 
+sctk.workspace = true
+sctk.optional = true
 palette.workspace = true
 palette.optional = true
 
