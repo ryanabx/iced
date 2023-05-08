@@ -152,6 +152,9 @@ pub fn window_event(
         WindowEvent::CloseRequested => {
             Some(Event::Window(id, window::Event::CloseRequested))
         }
+        WindowEvent::CloseRequested => {
+            Some(Event::Window(id, window::Event::CloseRequested))
+        }
         WindowEvent::CursorMoved { position, .. } => {
             let position = position.to_logical::<f64>(scale_factor);
 

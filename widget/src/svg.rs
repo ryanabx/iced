@@ -23,7 +23,7 @@ pub use svg::Handle;
 /// [`Svg`] images can have a considerable rendering cost when resized,
 /// specially when they are complex.
 #[allow(missing_debug_implementations)]
-pub struct Svg<Theme = crate::Theme>
+pub struct Svg<'a, Theme = crate::Theme>
 where
     Theme: StyleSheet,
 {
@@ -41,7 +41,7 @@ where
     style: <Theme as StyleSheet>::Style,
 }
 
-impl<Theme> Svg<Theme>
+impl<'a, Theme> Svg<'a, Theme>
 where
     Theme: StyleSheet,
 {
@@ -138,7 +138,8 @@ where
     }
 }
 
-impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer> for Svg<Theme>
+impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
+    for Svg<'a, Theme>
 where
     Theme: iced_style::svg::StyleSheet,
     Renderer: svg::Renderer,
@@ -293,13 +294,13 @@ where
     }
 }
 
-impl<'a, Message, Theme, Renderer> From<Svg<Theme>>
+impl<'a, Message, Theme, Renderer> From<Svg<'a, Theme>>
     for Element<'a, Message, Theme, Renderer>
 where
     Theme: iced_style::svg::StyleSheet + 'a,
     Renderer: svg::Renderer + 'a,
 {
-    fn from(icon: Svg<Theme>) -> Element<'a, Message, Theme, Renderer> {
+    fn from(icon: Svg<'a, Theme>) -> Element<'a, Message, Theme, Renderer> {
         Element::new(icon)
     }
 }

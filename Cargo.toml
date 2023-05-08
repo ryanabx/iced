@@ -18,7 +18,7 @@ all-features = true
 maintenance = { status = "actively-developed" }
 
 [features]
-default = ["wgpu", "fira-sans", "multi-window", "a11y"]
+default = ["wgpu", "fira-sans", "multi-window"]
 # Enable the `wgpu` GPU-accelerated renderer backend
 wgpu = ["iced_renderer/wgpu", "iced_widget/wgpu"]
 # Enables the `Image` widget
@@ -32,7 +32,7 @@ qr_code = ["iced_widget/qr_code"]
 # Enables lazy widgets
 lazy = ["iced_widget/lazy"]
 # Enables a debug view in native platforms (press F12)
-debug = ["iced_winit/debug"]
+debug = ["iced_winit?/debug", "iced_sctk?/debug"]
 # Enables `tokio` as the `executor::Default` on native platforms
 tokio = ["iced_futures/tokio"]
 # Enables `async-std` as the `executor::Default` on native platforms
@@ -41,8 +41,6 @@ async-std = ["iced_futures/async-std"]
 smol = ["iced_futures/smol"]
 # Enables advanced color conversion via `palette`
 palette = ["iced_core/palette"]
-# Enables querying system information
-system = ["iced_winit/system"]
 # Enables broken "sRGB linear" blending to reproduce color management of the Web
 web-colors = ["iced_renderer/web-colors"]
 # Enables the WebGL backend, replacing WebGPU
@@ -50,15 +48,17 @@ webgl = ["iced_renderer/webgl"]
 # Enables the syntax `highlighter` module
 highlighter = ["iced_highlighter"]
 # Enables experimental multi-window support.
-multi-window = ["iced_winit/multi-window"]
+multi-window = ["iced_winit?/multi-window"]
 # Enables the advanced module
 advanced = []
 # Enables embedding Fira Sans as the default font on Wasm builds
 fira-sans = ["iced_renderer/fira-sans"]
 # Enables the `accesskit` accessibility library
-a11y = ["iced_accessibility", "iced_core/a11y", "iced_widget/a11y", "iced_winit?/a11y"]
+a11y = ["iced_accessibility", "iced_core/a11y", "iced_widget/a11y", "iced_winit?/a11y", "iced_sctk?/a11y"]
 # Enables the winit shell. Conflicts with `wayland` and `glutin`.
 winit = ["iced_winit", "iced_accessibility?/accesskit_winit"]
+# Enables the sctk shell. COnflicts with `winit` and `glutin`.
+wayland = ["iced_sctk", "iced_widget/wayland", "iced_accessibility?/accesskit_unix", "iced_core/wayland", "multi-window"]
 
 [dependencies]
 iced_core.workspace = true
@@ -68,6 +68,8 @@ iced_widget.workspace = true
 iced_winit.features = ["application"]
 iced_winit.workspace = true
 iced_winit.optional = true
+iced_sctk.workspace = true
+iced_sctk.optional = true
 iced_highlighter.workspace = true
 iced_highlighter.optional = true
 iced_accessibility.workspace = true
@@ -92,6 +94,7 @@ members = [
     "winit",
     "examples/*",
     "accessibility",
+    "sctk"
 ]
 
 [profile.release-opt]
@@ -127,6 +130,7 @@ iced_tiny_skia = { version = "0.13.0-dev", path = "tiny_skia" }
 iced_wgpu = { version = "0.13.0-dev", path = "wgpu" }
 iced_widget = { version = "0.13.0-dev", path = "widget" }
 iced_winit = { version = "0.13.0-dev", path = "winit" }
+iced_sctk = { version = "0.13.0-dev", path = "sctk" }
 iced_accessibility = { version = "0.13.0-dev", path = "accessibility" }
 
 async-std = "1.0"
@@ -152,6 +156,7 @@ qrcode = { version = "0.13", default-features = false }
 raw-window-handle = "0.6"
 resvg = "0.36"
 rustc-hash = "1.0"
+sctk = { package = "smithay-client-toolkit", git = "https://github.com/smithay/client-toolkit", rev = "2e9bf9f" }
 smol = "1.0"
 smol_str = "0.2"
 softbuffer = "0.4"
@@ -166,6 +171,7 @@ unicode-segmentation = "1.0"
 wasm-bindgen-futures = "0.4"
 wasm-timer = "0.2"
 web-sys = "=0.3.67"
+wayland-protocols = { version = "0.31.0", features = [ "staging"]}
 web-time = "0.2"
 wgpu = "0.19"
 winapi = "0.3"

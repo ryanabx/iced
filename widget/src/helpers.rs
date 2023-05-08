@@ -23,7 +23,12 @@ use crate::toggler::{self, Toggler};
 use crate::tooltip::{self, Tooltip};
 use crate::{Column, MouseArea, Row, Space, Themer, VerticalSlider};
 
-use std::borrow::Borrow;
+use std::borrow::{Borrow, Cow};
+#[cfg(feature = "wayland")]
+use crate::dnd_listener::DndListener;
+#[cfg(feature = "wayland")]
+use crate::dnd_source::DndSource;
+
 use std::ops::RangeInclusive;
 
 /// Creates a [`Column`] with the given children.
@@ -372,7 +377,9 @@ pub fn image<'a, Handle>(
 /// [`Svg`]: crate::Svg
 /// [`Handle`]: crate::svg::Handle
 #[cfg(feature = "svg")]
-pub fn svg<Theme>(handle: impl Into<core::svg::Handle>) -> crate::Svg<Theme>
+pub fn svg<'a, Theme>(
+    handle: impl Into<core::svg::Handle>,
+) -> crate::Svg<'a, Theme>
 where
     Theme: crate::svg::StyleSheet,
 {
@@ -452,4 +459,26 @@ where
     Theme: application::StyleSheet,
 {
     Themer::new(theme, content)
+}
+
+#[cfg(feature = "wayland")]
+/// A container for a dnd source
+pub fn dnd_source<'a, Message, Theme, Renderer>(
+    widget: impl Into<Element<'a, Message, Theme, Renderer>>,
+) -> DndSource<'a, Message, Theme, Renderer>
+where
+    Renderer: core::Renderer,
+{
+    DndSource::new(widget)
+}
+
+#[cfg(feature = "wayland")]
+/// A container for a dnd target
+pub fn dnd_listener<'a, Message, Theme, Renderer>(
+    widget: impl Into<Element<'a, Message, Theme, Renderer>>,
+) -> DndListener<'a, Message, Theme, Renderer>
+where
+    Renderer: core::Renderer,
+{
+    DndListener::new(widget)
 }
