@@ -1,14 +1,14 @@
-use iced::executor;
-use iced::id::Id;
-use iced::theme;
 use iced::widget::scrollable::{Properties, Scrollbar, Scroller};
 use iced::widget::{
     button, column, container, horizontal_space, progress_bar, radio, row,
     scrollable, slider, text, vertical_space, Scrollable,
 };
+use iced::{executor, theme, Alignment, Application, Color};
 use iced::{
     Alignment, Application, Color, Command, Element, Length, Settings, Theme,
 };
+use iced::{Command, Element, Length, Settings, Theme};
+use iced_core::id::Id;
 
 use once_cell::sync::Lazy;
 
