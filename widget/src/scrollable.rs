@@ -102,7 +102,6 @@ where
         self.direction = direction;
         self
     }
-
     /// Sets a function to call when the [`Scrollable`] is scrolled.
     ///
     /// The function takes the [`Viewport`] of the [`Scrollable`]
