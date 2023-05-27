@@ -119,6 +119,12 @@ where
         self
     }
 
+    /// Sets the [`Direction`] of the [`Scrollable`] .
+    pub fn direction(mut self, direction: Direction) -> Self {
+        self.direction = direction;
+        self
+    }
+    
     /// Sets a function to call when the [`Scrollable`] is scrolled.
     ///
     /// The function takes the [`Viewport`] of the [`Scrollable`]
