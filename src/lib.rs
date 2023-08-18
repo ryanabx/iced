@@ -213,7 +213,7 @@ pub mod multi_window;
 pub use style::theme;
 
 pub use crate::core::alignment;
-pub use crate::core::border;
+pub use crate::core::border::{self, Border, Radius};
 pub use crate::core::color;
 pub use crate::core::gradient;
 pub use crate::core::{
