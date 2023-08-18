@@ -578,6 +578,7 @@ async fn run_instance<A, E, C>(
                             window.state.theme(),
                             &renderer::Style {
                                 text_color: window.state.text_color(),
+                                scale_factor: window.state.scale_factor(),
                             },
                             cursor,
                         );
@@ -648,6 +649,9 @@ async fn run_instance<A, E, C>(
                                     window.state.theme(),
                                     &renderer::Style {
                                         text_color: window.state.text_color(),
+                                        scale_factor: window
+                                            .state
+                                            .scale_factor(),
                                     },
                                     window.state.cursor(),
                                 );
@@ -894,6 +898,7 @@ async fn run_instance<A, E, C>(
                                     state.theme(),
                                     &renderer::Style {
                                         text_color: state.text_color(),
+                                        scale_factor: state.scale_factor(),
                                     },
                                     cursor,
                                 )
@@ -1055,7 +1060,7 @@ where
 
 /// Updates a multi-window [`Application`] by feeding it messages, spawning any
 /// resulting [`Command`], and tracking its [`Subscription`].
-fn update<A: Application, C, E: Executor>(
+fn update<A: Application + 'static, C, E: Executor + 'static>(
     application: &mut A,
     compositor: &mut C,
     runtime: &mut Runtime<
