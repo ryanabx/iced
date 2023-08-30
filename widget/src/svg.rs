@@ -39,6 +39,7 @@ where
     height: Length,
     content_fit: ContentFit,
     style: <Theme as StyleSheet>::Style,
+    symbolic: bool,
 }
 
 impl<'a, Theme> Svg<'a, Theme>
@@ -59,6 +60,7 @@ where
             width: Length::Fill,
             height: Length::Shrink,
             content_fit: ContentFit::Contain,
+            symbolic: false,
             style: Default::default(),
         }
     }
@@ -93,6 +95,13 @@ where
             content_fit,
             ..self
         }
+    }
+
+    /// Symbolic icons inherit their color from the renderer if a color is not defined.
+    #[must_use]
+    pub fn symbolic(mut self, symbolic: bool) -> Self {
+        self.symbolic = symbolic;
+        self
     }
 
     /// Sets the style variant of this [`Svg`].
@@ -216,6 +225,9 @@ where
             } else {
                 theme.appearance(&self.style)
             };
+            if self.symbolic && appearance.color.is_none() {
+                appearance.color = Some(style.icon_color);
+            }
 
             renderer.draw(
                 self.handle.clone(),
