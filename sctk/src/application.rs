@@ -899,6 +899,7 @@ where
                     &mut renderer,
                     state.theme(),
                     &Style {
+                        icon_color: state.icon_color(),
                         text_color: state.text_color(),
                         scale_factor: state.scale_factor(),
                     },
@@ -1355,6 +1356,7 @@ where
                         &mut renderer,
                         state.theme(),
                         &Style {
+                            icon_color: state.icon_color(),
                             text_color: state.text_color(),
                             scale_factor: state.scale_factor(),
                         },
@@ -1784,6 +1786,11 @@ where
     /// Returns the current text [`Color`] of the [`State`].
     pub fn text_color(&self) -> Color {
         self.appearance.text_color
+    }
+
+    /// Returns the current icon [`Color`] of the [`State`].
+    pub fn icon_color(&self) -> Color {
+        self.appearance.icon_color
     }
 
     pub fn set_cursor_position(&mut self, p: Option<LogicalPosition<f64>>) {
