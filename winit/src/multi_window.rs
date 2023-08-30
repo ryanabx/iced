@@ -577,6 +577,7 @@ async fn run_instance<A, E, C>(
                             &mut window.renderer,
                             window.state.theme(),
                             &renderer::Style {
+                                icon_color: window.state.icon_color(),
                                 text_color: window.state.text_color(),
                                 scale_factor: window.state.scale_factor(),
                             },
@@ -648,6 +649,7 @@ async fn run_instance<A, E, C>(
                                     &mut window.renderer,
                                     window.state.theme(),
                                     &renderer::Style {
+                                        icon_color: window.state.icon_color(),
                                         text_color: window.state.text_color(),
                                         scale_factor: window
                                             .state
@@ -897,6 +899,7 @@ async fn run_instance<A, E, C>(
                                     &mut window.renderer,
                                     state.theme(),
                                     &renderer::Style {
+                                        icon_color: state.icon_color(),
                                         text_color: state.text_color(),
                                         scale_factor: state.scale_factor(),
                                     },
