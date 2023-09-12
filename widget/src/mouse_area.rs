@@ -23,6 +23,7 @@ pub struct MouseArea<
     Renderer = crate::Renderer,
 > {
     content: Element<'a, Message, Theme, Renderer>,
+    on_drag: Option<Message>,
     on_press: Option<Message>,
     on_release: Option<Message>,
     on_right_press: Option<Message>,
@@ -36,6 +37,13 @@ pub struct MouseArea<
 }
 
 impl<'a, Message, Theme, Renderer> MouseArea<'a, Message, Theme, Renderer> {
+    /// The message to emit when a drag is initiated.
+    #[must_use]
+    pub fn on_drag(mut self, message: Message) -> Self {
+        self.on_drag = Some(message);
+        self
+    }
+
     /// The message to emit on a left button press.
     #[must_use]
     pub fn on_press(mut self, message: Message) -> Self {
@@ -114,6 +122,8 @@ impl<'a, Message, Theme, Renderer> MouseArea<'a, Message, Theme, Renderer> {
 #[derive(Default)]
 struct State {
     is_hovered: bool,
+    // TODO: Support on_mouse_enter and on_mouse_exit
+    drag_initiated: Option<Point>,
 }
 
 impl<'a, Message, Theme, Renderer> MouseArea<'a, Message, Theme, Renderer> {
@@ -123,6 +133,7 @@ impl<'a, Message, Theme, Renderer> MouseArea<'a, Message, Theme, Renderer> {
     ) -> Self {
         MouseArea {
             content: content.into(),
+            on_drag: None,
             on_press: None,
             on_release: None,
             on_right_press: None,
@@ -213,7 +224,15 @@ where
             return event::Status::Captured;
         }
 
-        update(self, tree, event, layout, cursor, shell)
+        update(
+            self,
+            tree,
+            &event,
+            layout,
+            cursor,
+            shell,
+            tree.state.downcast_mut::<State>(),
+        )
     }
 
     fn mouse_interaction(
@@ -302,6 +321,7 @@ fn update<Message: Clone, Theme, Renderer>(
     layout: Layout<'_>,
     cursor: mouse::Cursor,
     shell: &mut Shell<'_, Message>,
+    state: &mut State,
 ) -> event::Status {
     if let Event::Mouse(mouse::Event::CursorMoved { .. })
     | Event::Touch(touch::Event::FingerMoved { .. }) = event
@@ -339,6 +359,7 @@ fn update<Message: Clone, Theme, Renderer>(
         if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
         | Event::Touch(touch::Event::FingerPressed { .. }) = event
         {
+            state.drag_initiated = cursor.position();
             shell.publish(message.clone());
 
             return event::Status::Captured;
@@ -349,6 +370,7 @@ fn update<Message: Clone, Theme, Renderer>(
         if let Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
         | Event::Touch(touch::Event::FingerLifted { .. }) = event
         {
+            state.drag_initiated = None;
             shell.publish(message.clone());
 
             return event::Status::Captured;
@@ -395,6 +417,25 @@ fn update<Message: Clone, Theme, Renderer>(
             shell.publish(message.clone());
 
             return event::Status::Captured;
+        }
+    }
+
+    if state.drag_initiated.is_none() && widget.on_drag.is_some() {
+        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
+        | Event::Touch(touch::Event::FingerPressed { .. }) = event
+        {
+            state.drag_initiated = cursor.position();
+        }
+    } else if let Some((message, drag_source)) =
+        widget.on_drag.as_ref().zip(state.drag_initiated)
+    {
+        if let Some(position) = cursor.position() {
+            if position.distance(drag_source) > 1.0 {
+                state.drag_initiated = None;
+                shell.publish(message.clone());
+
+                return event::Status::Captured;
+            }
         }
     }
 
