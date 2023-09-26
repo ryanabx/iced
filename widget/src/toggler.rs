@@ -102,7 +102,7 @@ where
             labeled_by_widget: None,
             is_toggled,
             on_toggle: Box::new(f),
-            label: label,
+            label,
             width: Length::Fill,
             size: Self::DEFAULT_SIZE,
             text_size: None,
