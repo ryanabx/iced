@@ -17,12 +17,19 @@ use crate::radio;
 use crate::rule;
 use crate::scrollable;
 use crate::slider;
+use crate::slider::RailBackground;
 use crate::svg;
 use crate::text_editor;
 use crate::text_input;
 use crate::toggler;
 
-use crate::core::{Background, Border, Color, Shadow, Vector};
+use ::palette::FromColor;
+use ::palette::RgbHue;
+use iced_core::gradient::ColorStop;
+use iced_core::gradient::Linear;
+use iced_core::Degrees;
+use iced_core::Radians;
+use iced_core::{Background, Border, Color, Shadow, Vector};
 
 use std::fmt;
 use std::rc::Rc;
@@ -640,7 +647,7 @@ impl slider::StyleSheet for Theme {
 
                 slider::Appearance {
                     rail: slider::Rail {
-                        colors: (
+                        colors: RailBackground::Pair(
                             palette.primary.base.color,
                             palette.secondary.base.color,
                         ),
@@ -651,6 +658,9 @@ impl slider::StyleSheet for Theme {
                         color: palette.background.base.color,
                         border_color: palette.primary.base.color,
                         ..handle
+                    },
+                    breakpoint: slider::Breakpoint {
+                        color: palette.background.weak.text,
                     },
                 }
             }
