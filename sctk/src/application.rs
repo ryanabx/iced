@@ -2101,7 +2101,7 @@ where
                     state.logical_size(),
                     &state.title,
                     debug,
-                    id.clone(), // TODO: run the operation on every widget tree ?
+                    *id, // TODO: run the operation on every widget tree ?
                     auto_size_surfaces,
                     proxy
                 );

@@ -9,7 +9,7 @@ use sctk::{
 };
 use std::fmt::Debug;
 
-use crate::{event_loop::state::SctkState, sctk_event::SctkEvent};
+use crate::event_loop::state::SctkState;
 
 impl<T: Debug> CompositorHandler for SctkState<T> {
     fn scale_factor_changed(
@@ -38,7 +38,7 @@ impl<T: Debug> CompositorHandler for SctkState<T> {
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
         _surface: &wl_surface::WlSurface,
-        _new_transform: wl_output::Transform,
+        _new_transform: sctk::reexports::client::protocol::wl_output::Transform,
     ) {
         // TODO
         // this is not required
