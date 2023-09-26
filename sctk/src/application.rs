@@ -1155,20 +1155,20 @@ where
                     for (object_id, surface_id) in &surface_ids {
                         let state = match states.get_mut(&surface_id.inner()) {
                             Some(s) => {
-                                if !s.needs_redraw() {
-                                    continue;
-                                } else if auto_size_surfaces
-                                    .get(surface_id)
-                                    .map(|(w, h, _, dirty)| {
-                                        // don't redraw yet if the autosize state is dirty
-                                        *dirty || {
-                                            let Size { width, height } =
-                                                s.logical_size();
-                                            width.round() as u32 != *w
-                                                || height.round() as u32 != *h
-                                        }
-                                    })
-                                    .unwrap_or_default()
+                                if !s.needs_redraw()
+                                    || auto_size_surfaces
+                                        .get(surface_id)
+                                        .map(|(w, h, _, dirty)| {
+                                            // don't redraw yet if the autosize state is dirty
+                                            *dirty || {
+                                                let Size { width, height } =
+                                                    s.logical_size();
+                                                width.round() as u32 != *w
+                                                    || height.round() as u32
+                                                        != *h
+                                            }
+                                        })
+                                        .unwrap_or_default()
                                 {
                                     continue;
                                 } else {
@@ -1228,7 +1228,7 @@ where
                     }
                     if !sent_control_flow {
                         let mut wait_500_ms = Instant::now();
-                        wait_500_ms = wait_500_ms + Duration::from_millis(250);
+                        wait_500_ms += Duration::from_millis(250);
                         _ = control_sender
                             .start_send(ControlFlow::WaitUntil(wait_500_ms));
                     }
@@ -2010,7 +2010,7 @@ where
                     state.logical_size(),
                     &state.title,
                     debug,
-                    id.clone(), // TODO: run the operation on every widget tree ?
+                    *id, // TODO: run the operation on every widget tree ?
                     auto_size_surfaces,
                     proxy
                 );
