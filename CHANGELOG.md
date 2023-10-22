@@ -198,6 +198,7 @@ Many thanks to...
 - @wyatt-herkamp
 
 Many thanks to...
+- @edfloreshz
 - @jackpot51
 - @wash2
 
