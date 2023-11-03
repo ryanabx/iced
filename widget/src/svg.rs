@@ -11,6 +11,7 @@ use crate::core::{
 };
 
 use std::borrow::Cow;
+use std::marker::PhantomData;
 use std::path::PathBuf;
 
 pub use crate::style::svg::{Appearance, StyleSheet};
@@ -40,6 +41,7 @@ where
     content_fit: ContentFit,
     style: <Theme as StyleSheet>::Style,
     symbolic: bool,
+    _phantom_data: PhantomData<&'a ()>,
 }
 
 impl<'a, Theme> Svg<'a, Theme>
@@ -62,6 +64,7 @@ where
             content_fit: ContentFit::Contain,
             symbolic: false,
             style: Default::default(),
+            _phantom_data: PhantomData::default(),
         }
     }
 
@@ -196,7 +199,7 @@ where
         _state: &Tree,
         renderer: &mut Renderer,
         theme: &Theme,
-        _style: &renderer::Style,
+        style: &renderer::Style,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
         _viewport: &Rectangle,
@@ -220,7 +223,7 @@ where
                 ..bounds
             };
 
-            let appearance = if is_mouse_over {
+            let mut appearance = if is_mouse_over {
                 theme.hovered(&self.style)
             } else {
                 theme.appearance(&self.style)
