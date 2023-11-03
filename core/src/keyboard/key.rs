@@ -7,6 +7,7 @@ use crate::SmolStr;
 ///
 /// [`winit`]: https://docs.rs/winit/0.29.10/winit/keyboard/enum.Key.html
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Key<C = SmolStr> {
     /// A key with an established name.
     Named(Named),
