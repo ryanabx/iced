@@ -29,6 +29,11 @@ sctk.optional = true
 palette.workspace = true
 palette.optional = true
 
+[dependencies.serde]
+version = "1"
+optional = true
+features = ["serde_derive"]
+
 [target.'cfg(windows)'.dependencies]
 raw-window-handle.workspace = true
 
