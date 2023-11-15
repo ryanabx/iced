@@ -403,6 +403,7 @@ impl Pipeline {
                     handle,
                     filter_method,
                     bounds,
+                    ..
                 } => {
                     if let Some(atlas_entry) = raster_cache.upload(
                         device,
