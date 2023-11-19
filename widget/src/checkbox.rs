@@ -1,6 +1,7 @@
 //! Show toggle controls using checkboxes.
 use iced_renderer::core::Size;
 use iced_runtime::core::widget::Id;
+#[cfg(feature = "a11y")]
 use std::borrow::Cow;
 
 use crate::core::alignment;

@@ -10,6 +10,7 @@ use crate::core::{
     ContentFit, Element, Layout, Length, Rectangle, Size, Vector, Widget,
 };
 
+#[cfg(feature = "a11y")]
 use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::path::PathBuf;
