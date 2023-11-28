@@ -677,7 +677,7 @@ pub fn draw<T, Theme, Renderer>(
                 ..renderer::Quad::default()
             },
             if auto_angle {
-                gradient.angle = Radians::from(Degrees(180.0));
+                gradient.angle = Radians::from(Degrees(90.0));
                 gradient
             } else {
                 gradient
