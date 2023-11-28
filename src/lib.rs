@@ -143,7 +143,7 @@
 //!   1. Draw the resulting user interface.
 //!
 //! # Usage
-//! The [`Application`] and [`Sandbox`] traits should get you started quickly,
+//! The [`Application`] trait should get you started quickly,
 //! streamlining all the process described above!
 //!
 //! [Elm]: https://elm-lang.org/
@@ -217,7 +217,7 @@ pub use crate::core::border::{self, Border, Radius};
 pub use crate::core::color;
 pub use crate::core::gradient;
 pub use crate::core::{
-    id, Alignment, Background, Border, Color, ContentFit, Degrees, Gradient,
+    id, layout::Limits, Alignment, Background, Border, Color, ContentFit, Degrees, Gradient,
     Length, Padding, Pixels, Point, Radians, Rectangle, Shadow, Size,
     Transformation, Vector,
 };
@@ -356,7 +356,5 @@ pub type Element<
     Renderer = crate::Renderer,
 > = crate::core::Element<'a, Message, Theme, Renderer>;
 
-/// The result of running an [`Application`].
-///
-/// [`Application`]: crate::Application
+/// The result of running an application.
 pub type Result = std::result::Result<(), Error>;
