@@ -14,8 +14,8 @@ use crate::core::touch;
 use crate::core::widget;
 use crate::core::widget::tree::{self, Tree};
 use crate::core::{
-    id::Internal, Alignment, Clipboard, Element, Layout, Length, Pixels,
-    Rectangle, Shell, Widget,
+    id::Internal, Clipboard, Element, Layout, Length, Pixels, Rectangle, Shell,
+    Widget,
 };
 
 pub use crate::style::checkbox::{Appearance, StyleSheet};
