@@ -12,9 +12,6 @@ pub use iced_sctk::{application::SurfaceIdWrapper, commands::*, settings::*};
 ///
 /// Unlike the impure version, the `view` method of this trait takes an
 /// immutable reference to `self` and returns a pure [`Element`].
-///
-/// [`Application`]: crate::Application
-/// [`Element`]: pure::Element
 pub trait Application: Sized {
     /// The [`Executor`] that will run commands and subscriptions.
     ///
@@ -67,10 +64,7 @@ pub trait Application: Sized {
         Self::Theme::default()
     }
 
-    /// Returns the current [`Style`] of the [`Theme`].
-    ///
-    /// [`Style`]: <Self::Theme as StyleSheet>::Style
-    /// [`Theme`]: Self::Theme
+    /// Returns the current Style of the Theme.
     fn style(&self) -> <Self::Theme as StyleSheet>::Style {
         Default::default()
     }

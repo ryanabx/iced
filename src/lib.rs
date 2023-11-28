@@ -143,7 +143,7 @@
 //!   1. Draw the resulting user interface.
 //!
 //! # Usage
-//! The [`Application`] and [`Sandbox`] traits should get you started quickly,
+//! The [`Application`] trait should get you started quickly,
 //! streamlining all the process described above!
 //!
 //! [Elm]: https://elm-lang.org/
@@ -354,7 +354,5 @@ pub type Element<
     Renderer = crate::Renderer,
 > = crate::core::Element<'a, Message, Theme, Renderer>;
 
-/// The result of running an [`Application`].
-///
-/// [`Application`]: crate::Application
+/// The result of running an application.
 pub type Result = std::result::Result<(), Error>;
