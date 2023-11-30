@@ -103,7 +103,7 @@ where
     fn diff(&mut self, tree: &mut widget::Tree) {
         tree.diff_children(&mut [
             self.content.as_widget_mut(),
-            self.tooltip.as_widget_mut(),
+            &mut self.tooltip,
         ]);
     }
 
