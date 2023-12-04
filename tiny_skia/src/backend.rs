@@ -170,8 +170,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 let transform = into_transform(transformation)
                     .post_scale(scale_factor, scale_factor);
@@ -459,8 +460,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 self.text_pipeline.draw_paragraph(
                     paragraph,
@@ -486,8 +488,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 self.text_pipeline.draw_editor(
                     editor,
@@ -518,8 +521,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 self.text_pipeline.draw_cached(
                     content,
@@ -584,8 +588,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 let transform = into_transform(transformation)
                     .post_scale(scale_factor, scale_factor);
@@ -618,8 +623,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 self.vector_pipeline.draw(
                     handle,
@@ -654,8 +660,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 pixels.fill_path(
                     path,
@@ -685,8 +692,9 @@ impl Backend {
                     return;
                 }
 
-                let clip_mask = (!physical_bounds.is_within(&clip_bounds))
-                    .then_some(clip_mask as &_);
+                let clip_mask = (!physical_bounds
+                    .is_within_strict(&clip_bounds))
+                .then_some(clip_mask as &_);
 
                 pixels.stroke_path(
                     path,
