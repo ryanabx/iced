@@ -160,7 +160,7 @@ impl Application for DndTest {
                         .map(|t| t.to_string())
                         .collect(),
                     DndAction::Move,
-                    window::Id::unique(),
+                    window::Id::MAIN,
                     Some(DndIcon::Custom(iced::window::Id::unique())),
                     Box::new(MyDndString(
                         self.current_text.chars().rev().collect::<String>(),
