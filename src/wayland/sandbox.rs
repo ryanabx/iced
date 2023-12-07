@@ -82,10 +82,6 @@ use crate::{
 ///     fn view(&self, _: Id) -> Element<Self::Message> {
 ///         "Hello, world!".into()
 ///     }
-///
-///     fn close_requested(&self, _: Id) -> Self::Message {
-///         unimplemented!()
-///     }
 /// }
 /// ```
 pub trait Sandbox {
