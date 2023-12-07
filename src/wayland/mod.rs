@@ -60,7 +60,7 @@ pub trait Application: Sized {
     /// Returns the current [`Theme`] of the [`Application`].
     ///
     /// [`Theme`]: Self::Theme
-    fn theme(&self, id: Id) -> Self::Theme {
+    fn theme(&self, _id: Id) -> Self::Theme {
         Self::Theme::default()
     }
 
@@ -98,7 +98,7 @@ pub trait Application: Sized {
     /// while a scale factor of `0.5` will shrink them to half their size.
     ///
     /// By default, it returns `1.0`.
-    fn scale_factor(&self, id: Id) -> f64 {
+    fn scale_factor(&self, _id: Id) -> f64 {
         1.0
     }
 

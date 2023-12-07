@@ -275,7 +275,7 @@ where
 }
 
 fn build_user_interface<'a, P: Program>(
-    id: crate::window::Id,
+    _id: crate::window::Id,
     program: &'a mut P,
     cache: user_interface::Cache,
     renderer: &mut P::Renderer,
