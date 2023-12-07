@@ -1140,14 +1140,10 @@ fn run_command<A, C, E>(
     for action in command.actions() {
         match action {
             command::Action::Future(future) => {
-                runtime.spawn(Box::pin(
-                    future.map(|e| UserEventWrapper::Message(e)),
-                ));
+                runtime.spawn(Box::pin(future.map(UserEventWrapper::Message)));
             }
             command::Action::Stream(stream) => {
-                runtime.run(Box::pin(
-                    stream.map(|e| UserEventWrapper::Message(e)),
-                ));
+                runtime.run(Box::pin(stream.map(UserEventWrapper::Message)));
             }
             command::Action::Clipboard(action) => match action {
                 clipboard::Action::Read(tag, kind) => {

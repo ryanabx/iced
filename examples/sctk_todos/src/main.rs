@@ -1,11 +1,8 @@
 use env_logger::Env;
 use iced::alignment::{self, Alignment};
 use iced::event::{self, listen_raw, Event};
-use iced::subscription;
 use iced::theme::{self, Theme};
-use iced::wayland::actions::data_device::ActionInner;
 use iced::wayland::actions::window::SctkWindowSettings;
-use iced::wayland::data_device::action as data_device_action;
 use iced::wayland::InitialSurface;
 use iced::widget::{
     self, button, checkbox, column, container, row, scrollable, text,
@@ -21,7 +18,6 @@ use iced_core::{id, keyboard};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use std::sync::Arc;
 
 static INPUT_ID: Lazy<Id> = Lazy::new(Id::unique);
 
