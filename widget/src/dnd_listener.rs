@@ -416,6 +416,10 @@ fn update<Message: Clone, Renderer, Theme>(
         Event::PlatformSpecific(PlatformSpecific::Wayland(
             event::wayland::Event::DndOffer(DndOfferEvent::Leave),
         )) => {
+            if matches!(state.dnd, DndState::None | DndState::External(..)) {
+                return event::Status::Ignored;
+            }
+
             if !matches!(state.dnd, DndState::Dropped) {
                 state.dnd = DndState::None;
             }
@@ -430,10 +434,10 @@ fn update<Message: Clone, Renderer, Theme>(
         )) => {
             if matches!(state.dnd, DndState::Hovered(..)) {
                 state.dnd = DndState::Dropped;
-            }
-            if let Some(message) = widget.on_drop.clone() {
-                shell.publish(message);
-                return event::Status::Captured;
+                if let Some(message) = widget.on_drop.clone() {
+                    shell.publish(message);
+                    return event::Status::Captured;
+                }
             }
         }
         Event::PlatformSpecific(PlatformSpecific::Wayland(
@@ -481,6 +485,10 @@ fn update<Message: Clone, Renderer, Theme>(
                 action,
             )),
         )) => {
+            if matches!(state.dnd, DndState::None | DndState::External(..)) {
+                return event::Status::Ignored;
+            }
+
             if let Some(message) = widget.on_selected_action.as_ref() {
                 shell.publish(message(*action));
                 return event::Status::Captured;
