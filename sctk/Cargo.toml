@@ -16,7 +16,6 @@ keywords.workspace = true
 debug = ["iced_runtime/debug"]
 system = ["sysinfo"]
 application = []
-multi_window = []
 a11y = ["iced_accessibility", "iced_runtime/a11y"]
 
 [dependencies]
