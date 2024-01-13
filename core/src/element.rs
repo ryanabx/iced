@@ -506,6 +506,15 @@ where
     fn set_id(&mut self, id: Id) {
         self.widget.set_id(id);
     }
+
+    fn drag_destinations(
+        &self,
+        state: &Tree,
+        layout: Layout<'_>,
+        dnd_rectangles: &mut crate::clipboard::DndDestinationRectangles,
+    ) {
+        self.widget.drag_destinations(state, layout, dnd_rectangles);
+    }
 }
 
 struct Explain<'a, Message, Theme, Renderer: crate::Renderer> {
@@ -664,6 +673,17 @@ where
 
     fn set_id(&mut self, id: Id) {
         self.element.widget.set_id(id);
+    }
+
+    fn drag_destinations(
+        &self,
+        state: &Tree,
+        layout: Layout<'_>,
+        dnd_rectangles: &mut crate::clipboard::DndDestinationRectangles,
+    ) {
+        self.element
+            .widget
+            .drag_destinations(state, layout, dnd_rectangles);
     }
     // TODO maybe a11y_nodes
 }

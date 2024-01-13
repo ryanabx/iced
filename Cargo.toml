@@ -51,11 +51,22 @@ multi-window = ["iced_winit?/multi-window"]
 # Enables the advanced module
 advanced = []
 # Enables the `accesskit` accessibility library
-a11y = ["iced_accessibility", "iced_core/a11y", "iced_widget/a11y", "iced_winit?/a11y", "iced_sctk?/a11y"]
+a11y = [
+    "iced_accessibility",
+    "iced_core/a11y",
+    "iced_widget/a11y",
+    "iced_winit?/a11y",
+    "iced_sctk?/a11y",
+]
 # Enables the winit shell. Conflicts with `wayland` and `glutin`.
 winit = ["iced_winit", "iced_accessibility?/accesskit_winit"]
 # Enables the sctk shell. Conflicts with `winit` and `glutin`.
-wayland = ["iced_sctk", "iced_widget/wayland", "iced_accessibility?/accesskit_unix", "iced_core/wayland"]
+wayland = [
+    "iced_sctk",
+    "iced_widget/wayland",
+    "iced_accessibility?/accesskit_unix",
+    "iced_core/wayland",
+]
 # Enables clipboard for iced_sctk
 wayland-clipboard = ["iced_sctk?/clipboard"]
 
@@ -75,6 +86,8 @@ iced_accessibility.workspace = true
 iced_accessibility.optional = true
 thiserror.workspace = true
 window_clipboard.workspace = true
+mime.workspace = true
+dnd.workspace = true
 
 image.workspace = true
 image.optional = true
@@ -94,7 +107,7 @@ members = [
     "winit",
     "examples/*",
     "accessibility",
-    "sctk"
+    "sctk",
 ]
 exclude = ["examples/integration"]
 
