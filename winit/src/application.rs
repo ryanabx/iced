@@ -2,13 +2,21 @@
 mod drag_resize;
 mod state;
 
+use dnd::DndAction;
+use dnd::DndEvent;
+use dnd::DndSurface;
+use dnd::Icon;
 #[cfg(feature = "a11y")]
 use iced_graphics::core::widget::operation::focusable::focus;
 use iced_graphics::core::widget::operation::OperationWrapper;
 use iced_graphics::core::widget::Operation;
+use iced_graphics::Viewport;
 use iced_runtime::futures::futures::FutureExt;
+use iced_style::core::clipboard::DndSource;
 use iced_style::core::Clipboard as CoreClipboard;
+use iced_style::core::Length;
 pub use state::State;
+use window_clipboard::mime;
 use window_clipboard::mime::ClipboardStoreData;
 
 use crate::conversion;
@@ -31,6 +39,7 @@ use crate::{Clipboard, Error, Proxy, Settings};
 use futures::channel::mpsc;
 use futures::stream::StreamExt;
 
+use std::any::Any;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
 
@@ -39,7 +48,6 @@ pub use profiler::Profiler;
 #[cfg(feature = "trace")]
 use tracing::{info_span, instrument::Instrument};
 
-#[derive(Debug)]
 /// Wrapper aroun application Messages to allow for more UserEvent variants
 pub enum UserEventWrapper<Message> {
     /// Application Message
@@ -50,6 +58,49 @@ pub enum UserEventWrapper<Message> {
     #[cfg(feature = "a11y")]
     /// A11y was enabled
     A11yEnabled,
+    /// CLipboard Message
+    StartDnd {
+        /// internal dnd
+        internal: bool,
+        /// the surface the dnd is started from
+        source_surface: Option<DndSource>,
+        /// the icon if any
+        /// This is actually an Element
+        icon_surface: Option<Box<dyn Any>>,
+        /// the content of the dnd
+        content: Box<dyn mime::AsMimeTypes + Send + 'static>,
+        /// the actions of the dnd
+        actions: DndAction,
+    },
+    /// Dnd Event
+    Dnd(DndEvent<DndSurface>),
+}
+
+unsafe impl<M> Send for UserEventWrapper<M> {}
+unsafe impl<M> Sync for UserEventWrapper<M> {}
+
+impl<M: std::fmt::Debug> std::fmt::Debug for UserEventWrapper<M> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UserEventWrapper::Message(m) => write!(f, "Message({:?})", m),
+            #[cfg(feature = "a11y")]
+            UserEventWrapper::A11y(a) => write!(f, "A11y({:?})", a),
+            #[cfg(feature = "a11y")]
+            UserEventWrapper::A11yEnabled => write!(f, "A11yEnabled"),
+            UserEventWrapper::StartDnd {
+                internal,
+                source_surface: _,
+                icon_surface,
+                content: _,
+                actions,
+            } => write!(
+                f,
+                "StartDnd {{ internal: {:?}, icon_surface: {}, actions: {:?} }}",
+                internal, icon_surface.is_some(), actions
+            ),
+            UserEventWrapper::Dnd(_) => write!(f, "Dnd"),
+        }
+    }
 }
 
 #[cfg(feature = "a11y")]
@@ -143,6 +194,7 @@ where
     E: Executor + 'static,
     C: Compositor<Renderer = A::Renderer> + 'static,
     A::Theme: StyleSheet,
+    <A>::Message: Sync,
 {
     use futures::task;
     use futures::Future;
@@ -338,6 +390,7 @@ async fn run_instance<A, E, C>(
     E: Executor + 'static,
     C: Compositor<Renderer = A::Renderer> + 'static,
     A::Theme: StyleSheet,
+    A::Message: Send + Sync + 'static,
 {
     use winit::event;
     use winit::event_loop::ControlFlow;
@@ -346,7 +399,8 @@ async fn run_instance<A, E, C>(
     let mut viewport_version = state.viewport_version();
     let physical_size = state.physical_size();
 
-    let mut clipboard = Clipboard::connect(&window);
+    let mut clipboard =
+        Clipboard::connect(&window, crate::proxy::Proxy::new(proxy.clone()));
     let mut cache = user_interface::Cache::default();
     let mut surface = compositor.create_surface(
         window.clone(),
@@ -388,6 +442,8 @@ async fn run_instance<A, E, C>(
         state.logical_size(),
         &mut debug,
     ));
+
+    let mut prev_dnd_rectangles_count = 0;
 
     // Creates closure for handling the window drag resize state with winit.
     let mut drag_resize_window_func = drag_resize::event_func(
@@ -477,6 +533,115 @@ async fn run_instance<A, E, C>(
                     }
                     #[cfg(feature = "a11y")]
                     UserEventWrapper::A11yEnabled => a11y_enabled = true,
+                    UserEventWrapper::StartDnd {
+                        internal,
+                        source_surface: _, // not needed if there is only one window
+                        icon_surface,
+                        content,
+                        actions,
+                    } => {
+                        let mut renderer = compositor.create_renderer();
+                        let icon_surface = icon_surface
+                            .map(|i| {
+                                let i: Box<dyn Any> = i;
+                                i
+                            })
+                            .and_then(|i| {
+                                i.downcast::<Arc<(
+                                    core::Element<
+                                        'static,
+                                        A::Message,
+                                        A::Theme,
+                                        A::Renderer,
+                                    >,
+                                    core::widget::tree::State,
+                                )>>()
+                                .ok()
+                            })
+                            .map(|e| {
+                                let e = Arc::into_inner(*e).unwrap();
+                                let (mut e, widget_state) = e;
+                                let lim = core::layout::Limits::new(
+                                    Size::new(1., 1.),
+                                    Size::new(
+                                        state.viewport().physical_width()
+                                            as f32,
+                                        state.viewport().physical_height()
+                                            as f32,
+                                    ),
+                                );
+
+                                let mut tree = core::widget::Tree {
+                                    id: e.as_widget().id(),
+                                    tag: e.as_widget().tag(),
+                                    state: widget_state,
+                                    children: e.as_widget().children(),
+                                };
+
+                                let size = e
+                                    .as_widget()
+                                    .layout(&mut tree, &renderer, &lim);
+                                e.as_widget_mut().diff(&mut tree);
+
+                                let size = lim.resolve(
+                                    Length::Shrink,
+                                    Length::Shrink,
+                                    size.size(),
+                                );
+                                let mut surface = compositor.create_surface(
+                                    window.clone(),
+                                    size.width.ceil() as u32,
+                                    size.height.ceil() as u32,
+                                );
+                                let viewport = Viewport::with_logical_size(
+                                    size,
+                                    state.viewport().scale_factor(),
+                                );
+
+                                let mut ui = UserInterface::build(
+                                    e,
+                                    size,
+                                    user_interface::Cache::default(),
+                                    &mut renderer,
+                                );
+                                _ = ui.draw(
+                                    &mut renderer,
+                                    state.theme(),
+                                    &renderer::Style {
+                                        icon_color: state.icon_color(),
+                                        text_color: state.text_color(),
+                                        scale_factor: state.scale_factor(),
+                                    },
+                                    Default::default(),
+                                );
+                                let mut bytes = compositor.screenshot(
+                                    &mut renderer,
+                                    &mut surface,
+                                    &viewport,
+                                    core::Color::TRANSPARENT,
+                                    &debug.overlay(),
+                                );
+                                for pix in bytes.chunks_exact_mut(4) {
+                                    // rgba -> argb little endian
+                                    pix.swap(0, 2);
+                                }
+                                Icon::Buffer {
+                                    data: Arc::new(bytes),
+                                    width: viewport.physical_width(),
+                                    height: viewport.physical_height(),
+                                    transparent: true,
+                                }
+                            });
+
+                        clipboard.start_dnd_winit(
+                            internal,
+                            DndSurface(Arc::new(Box::new(window.clone()))),
+                            icon_surface,
+                            content,
+                            actions,
+                        );
+                    }
+                    UserEventWrapper::Dnd(e) => events.push(Event::Dnd(e)),
                 };
             }
             event::Event::WindowEvent {
@@ -762,6 +927,22 @@ async fn run_instance<A, E, C>(
                         &mut debug,
                     ));
 
+                    let dnd_rectangles = user_interface
+                        .dnd_rectangles(prev_dnd_rectangles_count);
+                    let new_dnd_rectangles_count =
+                        dnd_rectangles.as_ref().len();
+
+                    if new_dnd_rectangles_count > 0
+                        || prev_dnd_rectangles_count > 0
+                    {
+                        clipboard.register_dnd_destination(
+                            DndSurface(Arc::new(Box::new(window.clone()))),
+                            dnd_rectangles.into_rectangles(),
+                        );
+                    }
+
+                    prev_dnd_rectangles_count = new_dnd_rectangles_count;
+
                     if should_exit {
                         break;
                     }
@@ -851,7 +1032,7 @@ pub fn update<A: Application + 'static, C, E: Executor + 'static>(
         Proxy<UserEventWrapper<A::Message>>,
         UserEventWrapper<A::Message>,
     >,
-    clipboard: &mut Clipboard,
+    clipboard: &mut Clipboard<A::Message>,
     should_exit: &mut bool,
     proxy: &mut winit::event_loop::EventLoopProxy<UserEventWrapper<A::Message>>,
     debug: &mut Debug,
@@ -909,7 +1090,7 @@ pub fn run_command<A, C, E>(
         Proxy<UserEventWrapper<A::Message>>,
         UserEventWrapper<A::Message>,
     >,
-    clipboard: &mut Clipboard,
+    clipboard: &mut Clipboard<A::Message>,
     should_exit: &mut bool,
     proxy: &mut winit::event_loop::EventLoopProxy<UserEventWrapper<A::Message>>,
     debug: &mut Debug,
@@ -1198,6 +1379,40 @@ pub fn run_command<A, C, E>(
                 log::warn!("Unsupported custom action in `iced_winit` shell");
             }
             command::Action::PlatformSpecific(_) => todo!(),
+            command::Action::Dnd(a) => match a {
+                iced_runtime::dnd::DndAction::RegisterDndDestination {
+                    surface,
+                    rectangles,
+                } => {
+                    clipboard.register_dnd_destination(surface, rectangles);
+                }
+                iced_runtime::dnd::DndAction::StartDnd {
+                    internal,
+                    source_surface,
+                    icon_surface,
+                    content,
+                    actions,
+                } => clipboard.start_dnd(
+                    internal,
+                    source_surface,
+                    icon_surface,
+                    content,
+                    actions,
+                ),
+                iced_runtime::dnd::DndAction::EndDnd => {
+                    clipboard.end_dnd();
+                }
+                iced_runtime::dnd::DndAction::PeekDnd(m, to_msg) => {
+                    let data = clipboard.peek_dnd(m);
+                    let message = to_msg(data);
+                    proxy
+                        .send_event(UserEventWrapper::Message(message))
+                        .expect("Send message to event loop");
+                }
+                iced_runtime::dnd::DndAction::SetAction(a) => {
+                    clipboard.set_action(a);
+                }
+            },
         }
     }
 }

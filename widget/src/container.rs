@@ -324,6 +324,29 @@ where
             cursor,
         )
     }
+
+    fn drag_destinations(
+        &self,
+        state: &Tree,
+        layout: Layout<'_>,
+        dnd_rectangles: &mut iced_style::core::clipboard::DndDestinationRectangles,
+    ) {
+        if let Some(l) = layout.children().next() {
+            self.content.as_widget().drag_destinations(
+                state,
+                l,
+                dnd_rectangles,
+            );
+        }
+    }
+
+    fn id(&self) -> Option<Id> {
+        self.id.clone()
+    }
+
+    fn set_id(&mut self, id: Id) {
+        self.id = Some(id);
+    }
 }
 
 impl<'a, Message, Theme, Renderer> From<Container<'a, Message, Theme, Renderer>>
