@@ -18,7 +18,6 @@ all-features = true
 maintenance = { status = "actively-developed" }
 
 [features]
-default = ["wgpu", "fira-sans", "winit", "multi-window"]
 # Enable the `wgpu` GPU-accelerated renderer backend
 wgpu = ["iced_renderer/wgpu", "iced_widget/wgpu"]
 # Enables the `Image` widget
@@ -144,7 +143,7 @@ bytemuck = { version = "1.0", features = ["derive"] }
 cosmic-text = { git = "https://github.com/pop-os/cosmic-text.git", rev = "e0ae465" }
 futures = "0.3"
 glam = "0.25"
-glyphon = { git = "https://github.com/wash2/glyphon.git", rev = "3598375"}
+glyphon = { git = "https://github.com/wash2/glyphon.git", rev = "b1610f3" }
 guillotiere = "0.6"
 half = "2.2"
 image = "0.24"
