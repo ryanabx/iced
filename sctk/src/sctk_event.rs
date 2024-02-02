@@ -42,6 +42,7 @@ use sctk::{
 };
 use std::{collections::HashMap, time::Instant};
 use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
+use xkeysym::Keysym;
 
 pub enum IcedSctkEvent<T> {
     /// Emitted when new events arrive from the OS to be processed.
@@ -564,10 +565,7 @@ impl SctkEvent {
                     )])
                     .collect(),
                 KeyboardEventVariant::Press(ke) => {
-                    let (key, location) = keysym_to_vkey_location(
-                        ke.keysym.raw(),
-                        ke.utf8.as_deref(),
-                    );
+                    let (key, location) = keysym_to_vkey_location(ke.keysym);
                     Some(iced_runtime::core::Event::Keyboard(
                         keyboard::Event::KeyPressed {
                             key: key,
@@ -582,8 +580,7 @@ impl SctkEvent {
                 KeyboardEventVariant::Repeat(KeyEvent {
                     keysym, utf8, ..
                 }) => {
-                    let (key, location) =
-                        keysym_to_vkey_location(keysym.raw(), utf8.as_deref());
+                    let (key, location) = keysym_to_vkey_location(keysym);
                     Some(iced_runtime::core::Event::Keyboard(
                         keyboard::Event::KeyPressed {
                             key: key,
@@ -596,10 +593,7 @@ impl SctkEvent {
                     .collect()
                 }
                 KeyboardEventVariant::Release(ke) => {
-                    let (k, location) = keysym_to_vkey_location(
-                        ke.keysym.raw(),
-                        ke.utf8.as_deref(),
-                    );
+                    let (k, location) = keysym_to_vkey_location(ke.keysym);
                     Some(iced_runtime::core::Event::Keyboard(
                         keyboard::Event::KeyReleased {
                             key: k,
@@ -945,14 +939,21 @@ impl SctkEvent {
     }
 }
 
-fn keysym_to_vkey_location(keysym: u32, utf8: Option<&str>) -> (Key, Location) {
-    let mut key = keysym_to_key(keysym);
+fn keysym_to_vkey_location(keysym: Keysym) -> (Key, Location) {
+    let raw = keysym.raw();
+    let mut key = keysym_to_key(raw);
     if matches!(key, key::Key::Unidentified) {
-        if let Some(utf8) = utf8 {
+        // XXX is there a better way to do this?
+        // we need to be able to determine the actual character for the key
+        // not the combination, so this seems to be correct
+        let mut utf8 = xkbcommon::xkb::keysym_to_utf8(keysym);
+        // remove null terminator
+        utf8.pop();
+        if utf8.len() > 0 {
             key = Key::Character(utf8.into());
         }
     }
 
-    let location = keymap::keysym_location(keysym);
+    let location = keymap::keysym_location(raw);
     (key, location)
 }
