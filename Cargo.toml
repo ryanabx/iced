@@ -140,10 +140,10 @@ iced_accessibility = { version = "0.1", path = "accessibility" }
 async-std = "1.0"
 bitflags = "2.0"
 bytemuck = { version = "1.0", features = ["derive"] }
-cosmic-text = { git = "https://github.com/pop-os/cosmic-text.git", rev = "e0ae465" }
+cosmic-text = { git = "https://github.com/pop-os/cosmic-text.git" }
 futures = "0.3"
 glam = "0.25"
-glyphon = { git = "https://github.com/wash2/glyphon.git", rev = "b1610f3" }
+glyphon = { git = "https://github.com/pop-os/glyphon.git", tag = "v0.5.0" }
 guillotiere = "0.6"
 half = "2.2"
 image = "0.24"
@@ -177,7 +177,9 @@ wasm-timer = "0.2"
 web-sys = "=0.3.67"
 wayland-protocols = { version = "0.32.1", features = ["staging"] }
 web-time = "0.2"
-wgpu = "0.19"
+# wgpu = "0.19"
+# Newer wgpu commit that fixes Vulkan backend on Nvidia
+wgpu = { git = "https://github.com/gfx-rs/wgpu", rev = "20fda69" }
 winapi = "0.3"
 window_clipboard = { git = "https://github.com/pop-os/window_clipboard.git", tag = "pop-dnd-7" }
 dnd = { git = "https://github.com/pop-os/window_clipboard.git", tag = "pop-dnd-7" }
