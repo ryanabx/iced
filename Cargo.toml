@@ -137,10 +137,10 @@ iced_accessibility = { version = "0.13.0-dev", path = "accessibility" }
 async-std = "1.0"
 bitflags = "2.0"
 bytemuck = { version = "1.0", features = ["derive"] }
-cosmic-text = { git = "https://github.com/pop-os/cosmic-text.git", rev = "e0ae465" }
+cosmic-text = { git = "https://github.com/pop-os/cosmic-text.git", rev = "1b025ae" }
 futures = "0.3"
 glam = "0.25"
-glyphon = { git = "https://github.com/wash2/glyphon.git", rev = "b1610f3" }
+glyphon = { git = "https://github.com/wash2/glyphon.git", tag = "cosmic-0.5" }
 guillotiere = "0.6"
 half = "2.2"
 image = "0.24"
