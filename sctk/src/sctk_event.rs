@@ -580,12 +580,10 @@ impl SctkEvent {
                     .collect()
                 }
                 KeyboardEventVariant::Repeat(KeyEvent {
-                    raw_code,
-                    utf8,
-                    ..
+                    keysym, utf8, ..
                 }) => {
                     let (key, location) =
-                        keysym_to_vkey_location(raw_code, utf8.as_deref());
+                        keysym_to_vkey_location(keysym.raw(), utf8.as_deref());
                     Some(iced_runtime::core::Event::Keyboard(
                         keyboard::Event::KeyPressed {
                             key: key,
