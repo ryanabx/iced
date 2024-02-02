@@ -163,7 +163,7 @@ rustc-hash = "1.0"
 sctk = { package = "smithay-client-toolkit", version = "0.19.1" }
 smol = "1.0"
 smol_str = "0.2"
-softbuffer = "0.4"
+softbuffer = { git = "https://github.com/pop-os/softbuffer", tag = "cosmic-4.0" }
 syntect = "5.1"
 sysinfo = "0.30"
 thiserror = "1.0"
