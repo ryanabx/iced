@@ -38,7 +38,7 @@ impl Editor {
         self.internal().editor.with_buffer(f)
     }
 
-    /// Returns the buffer of the [`Paragraph`].
+    /// Returns the buffer of the `Paragraph`.
     pub fn buffer(&self) -> &cosmic_text::Buffer {
         match self.internal().editor.buffer_ref() {
             cosmic_text::BufferRef::Owned(buffer) => buffer,
