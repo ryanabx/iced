@@ -143,7 +143,7 @@
 //!   1. Draw the resulting user interface.
 //!
 //! # Usage
-//! The [`Application`] trait should get you started quickly,
+//! The `Application` trait should get you started quickly,
 //! streamlining all the process described above!
 //!
 //! [Elm]: https://elm-lang.org/
