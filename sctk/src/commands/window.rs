@@ -55,6 +55,18 @@ pub fn start_drag_window<Message>(id: window::Id) -> Command<Message> {
     ))
 }
 
+pub fn maximize<Message>(id: window::Id, maximized: bool) -> Command<Message> {
+    Command::single(command::Action::PlatformSpecific(
+        platform_specific::Action::Wayland(wayland::Action::Window(
+            if maximized {
+                wayland::window::Action::Maximize { id }
+            } else {
+                wayland::window::Action::UnsetMaximize { id }
+            },
+        )),
+    ))
+}
+
 pub fn toggle_maximize<Message>(id: window::Id) -> Command<Message> {
     Command::single(command::Action::PlatformSpecific(
         platform_specific::Action::Wayland(wayland::Action::Window(

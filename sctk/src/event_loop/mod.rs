@@ -16,8 +16,9 @@ use crate::{
         wp_viewporter::ViewporterState,
     },
     sctk_event::{
-        DndOfferEvent, IcedSctkEvent, LayerSurfaceEventVariant,
-        PopupEventVariant, SctkEvent, StartCause, WindowEventVariant,
+        DataSourceEvent, DndOfferEvent, IcedSctkEvent,
+        LayerSurfaceEventVariant, PopupEventVariant, SctkEvent, StartCause,
+        WindowEventVariant,
     },
     settings,
     subsurface_widget::SubsurfaceState,
@@ -333,6 +334,7 @@ where
                         wl_shm,
                         wp_dmabuf,
                         qh: self.state.queue_handle.clone(),
+                        buffers: HashMap::new(),
                     }),
                     &self.state,
                     &mut control_flow,
@@ -527,7 +529,7 @@ where
 
             for event in frame_event_back_buffer.drain(..) {
                 sticky_exit_callback(
-                    IcedSctkEvent::Frame(event),
+                    IcedSctkEvent::Frame(event.0, event.1),
                     &self.state,
                     &mut control_flow,
                     &mut callback,
@@ -1196,8 +1198,16 @@ where
                                }
                             },
                             platform_specific::wayland::data_device::ActionInner::DndCancelled => {
-                                if let Some(source) = self.state.dnd_source.as_mut() {
-                                    source.source = None;
+                                if let Some(mut source) = self.state.dnd_source.take() {
+                                    if let Some(s) = source.icon_surface.take() {
+                                        s.0.destroy();
+                                    }
+                                    sticky_exit_callback(
+                                        IcedSctkEvent::SctkEvent(SctkEvent::DataSource(DataSourceEvent::DndCancelled)),
+                                            &self.state,
+                                            &mut control_flow,
+                                            &mut callback
+                                    );
                                 }
                             },
                             platform_specific::wayland::data_device::ActionInner::RequestDndData (mime_type) => {

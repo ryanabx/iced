@@ -45,6 +45,7 @@ use sctk::{
             protocol::{
                 wl_keyboard::WlKeyboard,
                 wl_output::WlOutput,
+                wl_region::WlRegion,
                 wl_seat::WlSeat,
                 wl_subsurface::WlSubsurface,
                 wl_surface::{self, WlSurface},
@@ -296,7 +297,7 @@ pub struct SctkState<T> {
     /// A sink for window and device events that is being filled during dispatching
     /// event loop and forwarded downstream afterwards.
     pub(crate) sctk_events: Vec<SctkEvent>,
-    pub(crate) frame_events: Vec<WlSurface>,
+    pub(crate) frame_events: Vec<(WlSurface, u32)>,
 
     /// pending user events
     pub pending_user_events: Vec<Event<T>>,
@@ -786,7 +787,12 @@ where
             .set_size(size.0.unwrap_or_default(), size.1.unwrap_or_default());
         layer_surface.set_exclusive_zone(exclusive_zone);
         if !pointer_interactivity {
-            layer_surface.set_input_region(None);
+            let region = self
+                .compositor_state
+                .wl_compositor()
+                .create_region(&self.queue_handle, ());
+            layer_surface.set_input_region(Some(&region));
+            region.destroy();
         }
         layer_surface.commit();
 
@@ -846,3 +852,4 @@ where
 }
 
 delegate_noop!(@<T: 'static + Debug> SctkState<T>: ignore WlSubsurface);
+delegate_noop!(@<T: 'static + Debug> SctkState<T>: ignore WlRegion);

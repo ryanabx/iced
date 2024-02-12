@@ -38,17 +38,7 @@ use iced_futures::{
 };
 use tracing::error;
 
-use sctk::{
-    reexports::client::{protocol::wl_surface::WlSurface, Proxy, QueueHandle},
-    seat::{keyboard::Modifiers, pointer::PointerEventKind},
-};
-use std::{
-    collections::HashMap, hash::Hash, marker::PhantomData, os::raw::c_void,
-    ptr::NonNull, time::Duration,
-};
-use wayland_backend::client::ObjectId;
-use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
-
+use iced_futures::core::Clipboard as IcedClipboard;
 use iced_graphics::{compositor, Compositor, Viewport};
 use iced_runtime::{
     clipboard,
@@ -72,7 +62,17 @@ use raw_window_handle::{
     RawDisplayHandle, RawWindowHandle, WaylandDisplayHandle,
     WaylandWindowHandle, WindowHandle,
 };
+use sctk::{
+    reexports::client::{protocol::wl_surface::WlSurface, Proxy, QueueHandle},
+    seat::{keyboard::Modifiers, pointer::PointerEventKind},
+};
 use std::mem::ManuallyDrop;
+use std::{
+    collections::HashMap, hash::Hash, marker::PhantomData, os::raw::c_void,
+    ptr::NonNull, time::Duration,
+};
+use wayland_backend::client::ObjectId;
+use wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport;
 
 use crate::subsurface_widget::{SubsurfaceInstance, SubsurfaceState};
 
@@ -270,6 +270,7 @@ where
     let auto_size_surfaces = HashMap::new();
 
     let surface_ids = Default::default();
+    let subsurface_ids = Default::default();
 
     let (mut sender, receiver) = mpsc::unbounded::<IcedSctkEvent<A::Message>>();
     let (control_sender, mut control_receiver) = mpsc::unbounded();
@@ -284,6 +285,7 @@ where
         receiver,
         control_sender,
         surface_ids,
+        subsurface_ids,
         auto_size_surfaces,
         // display,
         // context,
@@ -342,6 +344,7 @@ async fn run_instance<A, E, C>(
     mut receiver: mpsc::UnboundedReceiver<IcedSctkEvent<A::Message>>,
     mut control_sender: mpsc::UnboundedSender<ControlFlow>,
     mut surface_ids: HashMap<ObjectId, SurfaceIdWrapper>,
+    mut subsurface_ids: HashMap<ObjectId, (i32, i32, SurfaceIdWrapper)>,
     mut auto_size_surfaces: HashMap<SurfaceIdWrapper, (u32, u32, Limits, bool)>,
     backend: wayland_backend::client::Backend,
     init_command: Command<A::Message>,
@@ -434,22 +437,30 @@ where
                         variant,
                         ..
                     } => {
+                        let mut offset = (0., 0.);
                         let (state, _native_id) = match surface_ids
                             .get(&variant.surface.id())
                             .and_then(|id| states.get_mut(&id.inner()).map(|state| (state, id)))
                         {
                             Some(s) => s,
-                            None => continue,
+                            None => {
+                                if let Some((x_offset, y_offset, id)) = subsurface_ids.get(&variant.surface.id()) {
+                                    offset = (f64::from(*x_offset), f64::from(*y_offset));
+                                    states.get_mut(&id.inner()).map(|state| (state, id)).unwrap()
+                                } else {
+                                    continue
+                                }
+                            },
                         };
                         match variant.kind {
                             PointerEventKind::Enter { .. } => {
-                                state.set_cursor_position(Some(LogicalPosition { x: variant.position.0, y: variant.position.1 }));
+                                state.set_cursor_position(Some(LogicalPosition { x: variant.position.0 + offset.0, y: variant.position.1 + offset.1 }));
                             }
                             PointerEventKind::Leave { .. } => {
                                 state.set_cursor_position(None);
                             }
                             PointerEventKind::Motion { .. } => {
-                                state.set_cursor_position(Some(LogicalPosition { x: variant.position.0, y: variant.position.1 }));
+                                state.set_cursor_position(Some(LogicalPosition { x: variant.position.0 + offset.0, y: variant.position.1 + offset.1 }));
                             }
                             PointerEventKind::Press { .. }
                             | PointerEventKind::Release { .. }
@@ -512,7 +523,7 @@ where
                                         backend: backend.clone(),
                                         wl_surface
                                     };
-                                    if matches!(simple_clipboard.state,  crate::clipboard::State::Unavailable) {
+                                    if matches!(simple_clipboard.state(),  crate::clipboard::State::Unavailable) {
                                        if let Ok(h) = wrapper.display_handle() {
                                            if let RawDisplayHandle::Wayland(mut h) = h.as_raw() {
                                            simple_clipboard = unsafe { Clipboard::connect(h.display.as_mut()) };
@@ -590,7 +601,7 @@ where
                                          backend: backend.clone(),
                                          wl_surface
                                      };
-                                     if matches!(simple_clipboard.state,  crate::clipboard::State::Unavailable) {
+                                     if matches!(simple_clipboard.state(),  crate::clipboard::State::Unavailable) {
                                         if let Ok(h) = wrapper.display_handle() {
                                             if let RawDisplayHandle::Wayland(mut h) = h.as_raw() {
                                             simple_clipboard = unsafe { Clipboard::connect(h.display.as_mut()) };
@@ -898,9 +909,11 @@ where
                 );
 
                 let subsurfaces = crate::subsurface_widget::take_subsurfaces();
-                if let Some(subsurface_state) = subsurface_state.as_ref() {
+                if let Some(subsurface_state) = subsurface_state.as_mut() {
                     subsurface_state.update_subsurfaces(
+                        &mut subsurface_ids,
                         &state.wrapper.wl_surface,
+                        state.id,
                         &mut state.subsurfaces,
                         &subsurfaces,
                     );
@@ -925,34 +938,6 @@ where
                     && messages.is_empty()
                 {
                     continue;
-                }
-
-                let mut i = 0;
-                while i < sctk_events.len() {
-                    let remove = matches!(
-                        sctk_events[i],
-                        SctkEvent::NewOutput { .. }
-                            | SctkEvent::UpdateOutput { .. }
-                            | SctkEvent::RemovedOutput(_)
-                            | SctkEvent::SessionLocked
-                            | SctkEvent::SessionLockFinished
-                            | SctkEvent::SessionUnlocked
-                            | SctkEvent::PopupEvent { .. }
-                            | SctkEvent::LayerSurfaceEvent { .. }
-                            | SctkEvent::WindowEvent { .. }
-                    );
-                    if remove {
-                        let event = sctk_events.remove(i);
-                        for native_event in event.to_native(
-                            &mut mods,
-                            &surface_ids,
-                            &destroyed_surface_ids,
-                        ) {
-                            runtime.broadcast(native_event, Status::Ignored);
-                        }
-                    } else {
-                        i += 1;
-                    }
                 }
 
                 if surface_ids.is_empty() && !messages.is_empty() {
@@ -1012,6 +997,7 @@ where
                             if event_is_for_surface(
                                 &sctk_events[i],
                                 object_id,
+                                state,
                                 has_kbd_focus,
                             ) {
                                 filtered_sctk.push(sctk_events.remove(i));
@@ -1029,6 +1015,7 @@ where
                                     &mut mods,
                                     &surface_ids,
                                     &destroyed_surface_ids,
+                                    &subsurface_ids,
                                 )
                             })
                             .collect();
@@ -1091,7 +1078,7 @@ where
                             || state.viewport_changed;
                         if redraw_pending || needs_update {
                             state.set_needs_redraw(
-                                state.frame.is_some() || needs_update,
+                                state.frame_pending || needs_update,
                             );
                             state.set_first(false);
                         }
@@ -1242,6 +1229,35 @@ where
                     redraw_pending = false;
                 }
 
+                let mut i = 0;
+                while i < sctk_events.len() {
+                    let remove = matches!(
+                        sctk_events[i],
+                        SctkEvent::NewOutput { .. }
+                            | SctkEvent::UpdateOutput { .. }
+                            | SctkEvent::RemovedOutput(_)
+                            | SctkEvent::SessionLocked
+                            | SctkEvent::SessionLockFinished
+                            | SctkEvent::SessionUnlocked
+                            | SctkEvent::PopupEvent { .. }
+                            | SctkEvent::LayerSurfaceEvent { .. }
+                            | SctkEvent::WindowEvent { .. }
+                    );
+                    if remove {
+                        let event = sctk_events.remove(i);
+                        for native_event in event.to_native(
+                            &mut mods,
+                            &surface_ids,
+                            &destroyed_surface_ids,
+                            &subsurface_ids,
+                        ) {
+                            runtime.broadcast(native_event, Status::Ignored);
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+
                 sctk_events.clear();
                 // clear the destroyed surfaces after they have been handled
                 destroyed_surface_ids.clear();
@@ -1259,14 +1275,6 @@ where
                     let state = states.get_mut(&id.inner());
                     Some((*id, interface, state))
                 }) {
-                    // request a new frame
-                    // NOTE Ashley: this is done here only after a redraw for now instead of the event handler.
-                    // Otherwise cpu goes up in the running application as well as in cosmic-comp
-                    if let Some(surface) = state.frame.take() {
-                        surface.frame(&queue_handle, surface.clone());
-                        surface.commit();
-                    }
-
                     let Some(mut comp_surface) = state.surface.take() else {
                         error!("missing surface!");
                         continue;
@@ -1385,9 +1393,11 @@ where
                     // Update subsurfaces based on what view requested.
                     let subsurfaces =
                         crate::subsurface_widget::take_subsurfaces();
-                    if let Some(subsurface_state) = subsurface_state.as_ref() {
+                    if let Some(subsurface_state) = subsurface_state.as_mut() {
                         subsurface_state.update_subsurfaces(
+                            &mut subsurface_ids,
                             &state.wrapper.wl_surface,
+                            state.id,
                             &mut state.subsurfaces,
                             &subsurfaces,
                         );
@@ -1403,6 +1413,13 @@ where
                     let _ =
                         interfaces.insert(native_id.inner(), user_interface);
 
+                    if state.frame_pending {
+                        // request a new frame
+                        state.wrapper.wl_surface.frame(
+                            &queue_handle,
+                            state.wrapper.wl_surface.clone(),
+                        );
+                    }
                     let _ = compositor.present(
                         &mut renderer,
                         &mut comp_surface,
@@ -1410,6 +1427,9 @@ where
                         state.background_color(),
                         &debug.overlay(),
                     );
+                    // Need commit to get frame event, and update subsurfaces, even if main surface wasn't changed
+                    state.wrapper.wl_surface.commit();
+                    state.frame_pending = false;
                     state.surface = Some(comp_surface);
                     debug.render_finished();
                 }
@@ -1479,11 +1499,13 @@ where
             IcedSctkEvent::A11ySurfaceCreated(surface_id, adapter) => {
                 adapters.insert(surface_id.inner(), adapter);
             }
-            IcedSctkEvent::Frame(surface) => {
-                if let Some(id) = surface_ids.get(&surface.id()) {
+            IcedSctkEvent::Frame(surface, time) => {
+                if let Some(id) = surface_ids
+                    .get(&surface.id())
+                    .or_else(|| Some(&subsurface_ids.get(&surface.id())?.2))
+                {
                     if let Some(state) = states.get_mut(&id.inner()) {
-                        // TODO set this to the callback?
-                        state.set_frame(Some(surface));
+                        state.set_frame(time);
                     }
                 }
             }
@@ -1622,7 +1644,9 @@ where
     theme: <A as Program>::Theme,
     appearance: application::Appearance,
     application: PhantomData<A>,
-    frame: Option<WlSurface>,
+    // Time of last frame event, or 0
+    frame_pending: bool,
+    last_frame_time: u32,
     needs_redraw: bool,
     first: bool,
     wp_viewport: Option<WpViewport>,
@@ -1661,7 +1685,8 @@ where
             theme,
             appearance,
             application: PhantomData,
-            frame: None,
+            frame_pending: false,
+            last_frame_time: 0,
             needs_redraw: false,
             first: true,
             wp_viewport: None,
@@ -1680,8 +1705,13 @@ where
         self.needs_redraw
     }
 
-    pub(crate) fn set_frame(&mut self, frame: Option<WlSurface>) {
-        self.frame = frame;
+    fn set_frame(&mut self, time: u32) {
+        // If we get frame events from mulitple subsurface, should have same time. So ignore if
+        // time isn't newer.
+        if time == 0 || time > self.last_frame_time {
+            self.frame_pending = true;
+            self.last_frame_time = time;
+        }
     }
 
     pub(crate) fn first(&self) -> bool {
@@ -1976,14 +2006,14 @@ where
             }
             command::Action::Clipboard(action) => match action {
                 clipboard::Action::Read(s_to_msg) => {
-                    if matches!(clipboard.state,  crate::clipboard::State::Connected(_)) {
+                    if matches!(clipboard.state(),  crate::clipboard::State::Connected(_)) {
                         let contents = clipboard.read();
                         let message = s_to_msg(contents);
                         proxy.send_event(Event::Message(message));
                     }
                 }
                 clipboard::Action::Write(contents) => {
-                    if matches!(clipboard.state,  crate::clipboard::State::Connected(_)) {
+                    if matches!(clipboard.state(),  crate::clipboard::State::Connected(_)) {
                         clipboard.write(contents)
                     }
                 }
@@ -2196,15 +2226,26 @@ where
 }
 
 // Determine if `SctkEvent` is for surface with given object id.
-fn event_is_for_surface(
+fn event_is_for_surface<'a, A, C>(
     evt: &SctkEvent,
     object_id: &ObjectId,
+    state: &State<A, C>,
     has_kbd_focus: bool,
-) -> bool {
+) -> bool
+where
+    A: Application + 'static,
+    <A as Program>::Theme: StyleSheet,
+    C: Compositor,
+{
     match evt {
         SctkEvent::SeatEvent { id, .. } => &id.id() == object_id,
         SctkEvent::PointerEvent { variant, .. } => {
-            &variant.surface.id() == object_id
+            let event_object_id = variant.surface.id();
+            &event_object_id == object_id
+                || state
+                    .subsurfaces
+                    .iter()
+                    .any(|s| s.wl_surface.id() == event_object_id)
         }
         SctkEvent::KeyboardEvent { variant, .. } => match variant {
             KeyboardEventVariant::Leave(id) => &id.id() == object_id,
