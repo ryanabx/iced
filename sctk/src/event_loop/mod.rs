@@ -336,6 +336,7 @@ where
                         wl_shm,
                         wp_dmabuf,
                         qh: self.state.queue_handle.clone(),
+                        buffers: HashMap::new(),
                     }),
                     &self.state,
                     &mut control_flow,
@@ -530,7 +531,7 @@ where
 
             for event in frame_event_back_buffer.drain(..) {
                 sticky_exit_callback(
-                    IcedSctkEvent::Frame(event),
+                    IcedSctkEvent::Frame(event.0, event.1),
                     &self.state,
                     &mut control_flow,
                     &mut callback,
