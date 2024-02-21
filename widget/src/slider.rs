@@ -11,15 +11,15 @@ use crate::core::touch;
 use crate::core::widget::tree::{self, Tree};
 use crate::core::widget::Id;
 use crate::core::{
-    Border, Clipboard, Element, Layout, Length, Pixels, Point, Rectangle,
-    Shell, Size, Widget,
+    Border, Clipboard, Color, Element, Layout, Length, Pixels, Point,
+    Rectangle, Shell, Size, Widget,
 };
 
 use std::ops::RangeInclusive;
 
 use iced_renderer::core::{border::Radius, Degrees, Radians};
 pub use iced_style::slider::{
-    Appearance, Handle, HandleShape, Rail, StyleSheet,
+    Appearance, Handle, HandleShape, Rail, RailBackground, StyleSheet,
 };
 
 #[cfg(feature = "a11y")]
@@ -50,6 +50,7 @@ use std::borrow::Cow;
 ///
 /// ![Slider drawn by Coffee's renderer](https://github.com/hecrj/coffee/blob/bda9818f823dfcb8a7ad0ff4940b4d4b387b5208/images/ui/slider.png?raw=true)
 #[allow(missing_debug_implementations)]
+#[must_use]
 pub struct Slider<'a, T, Message, Theme = crate::Theme>
 where
     Theme: StyleSheet,
@@ -66,6 +67,7 @@ where
     shift_step: Option<T>,
     value: T,
     default: Option<T>,
+    breakpoints: &'a [T],
     on_change: Box<dyn Fn(T) -> Message + 'a>,
     on_release: Option<Message>,
     width: Length,
@@ -119,6 +121,7 @@ where
             range,
             step: T::from(1),
             shift_step: None,
+            breakpoints: &[],
             on_change: Box::new(on_change),
             on_release: None,
             width: Length::Fill,
@@ -134,13 +137,20 @@ where
         self.default = Some(default.into());
         self
     }
+    /// Defines breakpoints to visibly mark on the slider.
+    ///
+    /// The slider will gravitate towards a breakpoint when near it.
+    pub fn breakpoints(mut self, breakpoints: &'a [T]) -> Self {
+        self.breakpoints = breakpoints;
+        self
+    }
 
     /// Sets the release message of the [`Slider`].
     /// This is called when the mouse is released from the slider.
     ///
     /// Typically, the user's interaction with the slider is finished when this message is produced.
     /// This is useful if you need to spawn a long-running task from the slider's result, where
-    /// the default on_change message could create too many events.
+    /// the default `on_change` message could create too many events.
     pub fn on_release(mut self, on_release: Message) -> Self {
         self.on_release = Some(on_release);
         self
@@ -289,6 +299,7 @@ where
             tree.state.downcast_ref::<State>(),
             self.value,
             &self.range,
+            self.breakpoints,
             theme,
             &self.style,
         );
@@ -566,6 +577,7 @@ pub fn draw<T, Theme, Renderer>(
     state: &State,
     value: T,
     range: &RangeInclusive<T>,
+    breakpoints: &[T],
     theme: &Theme,
     style: &Theme::Style,
 ) where
@@ -583,6 +595,7 @@ pub fn draw<T, Theme, Renderer>(
     } else {
         theme.active(style)
     };
+
     let border_width = style
         .handle
         .border_width
@@ -630,8 +643,38 @@ pub fn draw<T, Theme, Renderer>(
 
     let rail_y = bounds.y + bounds.height / 2.0;
 
+    // Draw the breakpoint indicators beneath the slider.
+    const BREAKPOINT_WIDTH: f32 = 2.0;
+    for &value in breakpoints {
+        let value: f64 = value.into();
+        let offset = if range_start >= range_end {
+            0.0
+        } else {
+            (bounds.width - BREAKPOINT_WIDTH) * (value as f32 - range_start)
+                / (range_end - range_start)
+        };
+
+        renderer.fill_quad(
+            renderer::Quad {
+                bounds: Rectangle {
+                    x: bounds.x + offset,
+                    y: rail_y + 6.0,
+                    width: BREAKPOINT_WIDTH,
+                    height: 8.0,
+                },
+                border: Border {
+                    radius: 0.0.into(),
+                    width: 0.0,
+                    color: Color::TRANSPARENT,
+                },
+                ..renderer::Quad::default()
+            },
+            crate::core::Background::Color(style.breakpoint.color),
+        );
+    }
+
     match style.rail.colors {
-        iced_style::slider::RailBackground::Pair(l, r) => {
+        RailBackground::Pair(l, r) => {
             // rail
             renderer.fill_quad(
                 renderer::Quad {
@@ -662,7 +705,7 @@ pub fn draw<T, Theme, Renderer>(
                 r,
             );
         }
-        iced_style::slider::RailBackground::Gradient {
+        RailBackground::Gradient {
             mut gradient,
             auto_angle,
         } => renderer.fill_quad(
