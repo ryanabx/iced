@@ -1,4 +1,6 @@
 //! Create interactive, native cross-platform applications for WGPU.
+#[path = "application/drag_resize.rs"]
+mod drag_resize;
 mod state;
 mod window_manager;
 
@@ -153,6 +155,7 @@ where
 
     let should_main_be_visible = settings.window.visible;
     let exit_on_close_request = settings.window.exit_on_close_request;
+    let resize_border = settings.window.resize_border;
 
     let builder = conversion::window_settings(
         settings.window,
@@ -210,6 +213,7 @@ where
         &application,
         &mut compositor,
         exit_on_close_request,
+        resize_border,
     );
 
     let (mut event_sender, event_receiver) = mpsc::unbounded();
@@ -226,6 +230,7 @@ where
         init_command,
         window_manager,
         should_main_be_visible,
+        resize_border,
     ));
 
     let mut context = task::Context::from_waker(task::noop_waker_ref());
@@ -369,6 +374,7 @@ async fn run_instance<A, E, C>(
     init_command: Command<A::Message>,
     mut window_manager: WindowManager<A, C>,
     should_main_window_be_visible: bool,
+    resize_border: u32,
 ) where
     A: Application + 'static,
     E: Executor + 'static,
@@ -482,6 +488,7 @@ async fn run_instance<A, E, C>(
                     &application,
                     &mut compositor,
                     exit_on_close_request,
+                    resize_border,
                 );
 
                 let logical_size = window.state.logical_size();
@@ -728,6 +735,15 @@ async fn run_instance<A, E, C>(
                         else {
                             continue;
                         };
+
+                        // Initiates a drag resize window state when found.
+                        if let Some(func) =
+                            window.drag_resize_window_func.as_mut()
+                        {
+                            if func(&window.raw, &window_event) {
+                                continue;
+                            }
+                        }
 
                         if matches!(
                             window_event,
