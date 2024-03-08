@@ -839,7 +839,7 @@ where
 
 /// Updates an [`Application`] by feeding it the provided messages, spawning any
 /// resulting [`Command`], and tracking its [`Subscription`].
-pub fn update<A: Application, C, E: Executor>(
+pub fn update<A: Application + 'static, C, E: Executor + 'static>(
     application: &mut A,
     compositor: &mut C,
     surface: &mut C::Surface,
