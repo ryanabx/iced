@@ -1080,7 +1080,7 @@ where
 
 /// Updates a multi-window [`Application`] by feeding it messages, spawning any
 /// resulting [`Command`], and tracking its [`Subscription`].
-fn update<A: Application, C, E: Executor>(
+fn update<A: Application + 'static, C, E: Executor + 'static>(
     application: &mut A,
     compositor: &mut C,
     runtime: &mut Runtime<
