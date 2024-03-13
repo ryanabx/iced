@@ -199,7 +199,9 @@ impl Backend {
                 }
                 let path = rounded_rectangle(path_bounds, fill_border_radius);
 
-                if shadow.color.a > 0.0 {
+                // TODO: Disabled due to graphical glitches
+                // if shadow.color.a > 0.0 {
+                if false {
                     let shadow_bounds = (Rectangle {
                         x: bounds.x + shadow.offset.x - shadow.blur_radius,
                         y: bounds.y + shadow.offset.y - shadow.blur_radius,
