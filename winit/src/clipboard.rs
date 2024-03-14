@@ -1,6 +1,7 @@
 //! Access the clipboard.
 
 use crate::core::clipboard::Kind;
+use window_clipboard::mime::{self, ClipboardStoreData};
 
 /// A buffer for short-term storage and transfer within and between
 /// applications.
@@ -75,5 +76,70 @@ impl crate::core::Clipboard for Clipboard {
 
     fn write(&mut self, kind: Kind, contents: String) {
         self.write(kind, contents);
+    }
+
+    fn read_primary(&self) -> Option<String> {
+        match &self.state {
+            State::Connected(clipboard) => {
+                clipboard.read_primary().and_then(|res| res.ok())
+            }
+            State::Unavailable => None,
+        }
+    }
+
+    fn write_primary(&mut self, contents: String) {
+        match &mut self.state {
+            State::Connected(clipboard) => {
+                _ = clipboard.write_primary(contents)
+            }
+            State::Unavailable => {}
+        }
+    }
+
+    fn read_data(&self, mimes: Vec<String>) -> Option<(Vec<u8>, String)> {
+        match &self.state {
+            State::Connected(clipboard) => {
+                clipboard.read_raw(mimes).and_then(|res| res.ok())
+            }
+            State::Unavailable => None,
+        }
+    }
+
+    fn write_data(
+        &mut self,
+        contents: ClipboardStoreData<
+            Box<dyn Send + Sync + 'static + mime::AsMimeTypes>,
+        >,
+    ) {
+        match &mut self.state {
+            State::Connected(clipboard) => _ = clipboard.write_data(contents),
+            State::Unavailable => {}
+        }
+    }
+
+    fn read_primary_data(
+        &self,
+        mimes: Vec<String>,
+    ) -> Option<(Vec<u8>, String)> {
+        match &self.state {
+            State::Connected(clipboard) => {
+                clipboard.read_primary_raw(mimes).and_then(|res| res.ok())
+            }
+            State::Unavailable => None,
+        }
+    }
+
+    fn write_primary_data(
+        &mut self,
+        contents: ClipboardStoreData<
+            Box<dyn Send + Sync + 'static + mime::AsMimeTypes>,
+        >,
+    ) {
+        match &mut self.state {
+            State::Connected(clipboard) => {
+                _ = clipboard.write_primary_data(contents)
+            }
+            State::Unavailable => {}
+        }
     }
 }

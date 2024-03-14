@@ -228,6 +228,7 @@ pub mod clipboard {
     pub use crate::runtime::clipboard::{
         read, read_primary, write, write_primary,
     };
+    pub use iced_core::clipboard::read_data;
 }
 
 pub mod executor {
