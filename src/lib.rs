@@ -230,6 +230,7 @@ pub mod clipboard {
     };
     pub use iced_core::clipboard::read_data;
     pub use window_clipboard::mime;
+    pub use dnd;
 }
 
 pub mod executor {

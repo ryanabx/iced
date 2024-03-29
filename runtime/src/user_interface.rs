@@ -624,6 +624,11 @@ where
             cursor,
         )
     }
+
+    /// Find widget with given id
+    pub fn find(&self, id: &widget::Id) -> Option<&widget::Tree> {
+        self.state.find(id)
+    }
 }
 
 /// Reusable data of a specific [`UserInterface`].
