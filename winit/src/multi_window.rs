@@ -132,7 +132,7 @@ where
     A: Application + 'static,
     E: Executor + 'static,
     C: Compositor<Renderer = A::Renderer> + 'static,
-    A::Message: Send + Sync + 'static,
+    A::Message: Send + 'static,
     A::Theme: StyleSheet,
 {
     use winit::event_loop::EventLoopBuilder;
@@ -385,7 +385,7 @@ async fn run_instance<A, E, C>(
     A: Application + 'static,
     E: Executor + 'static,
     C: Compositor<Renderer = A::Renderer> + 'static,
-    A::Message: Send + Sync + 'static,
+    A::Message: Send + 'static,
     A::Theme: StyleSheet,
 {
     use winit::event;
@@ -1312,7 +1312,7 @@ fn update<A: Application + 'static, C, E: Executor + 'static>(
     ui_caches: &mut HashMap<window::Id, user_interface::Cache>,
 ) where
     C: Compositor<Renderer = A::Renderer> + 'static,
-    A::Message: Send + Sync + 'static,
+    A::Message: Send + 'static,
     A::Theme: StyleSheet,
 {
     for message in messages.drain(..) {
@@ -1364,7 +1364,7 @@ fn run_command<A, C, E>(
     A: Application,
     E: Executor,
     C: Compositor<Renderer = A::Renderer> + 'static,
-    A::Message: Send + Sync + 'static,
+    A::Message: Send + 'static,
     A::Theme: StyleSheet,
 {
     use crate::runtime::clipboard;
