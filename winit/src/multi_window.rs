@@ -19,7 +19,6 @@ use crate::futures::futures::task;
 use crate::futures::futures::{Future, StreamExt};
 use crate::futures::{Executor, Runtime, Subscription};
 use crate::graphics::{compositor, Compositor};
-use crate::multi_window::operation::focusable::focus;
 use crate::multi_window::operation::OperationWrapper;
 use crate::multi_window::window_manager::WindowManager;
 use crate::runtime::command::{self, Command};
@@ -33,7 +32,6 @@ use dnd::Icon;
 use iced_graphics::Viewport;
 use iced_runtime::futures::futures::FutureExt;
 use iced_style::core::Length;
-use iced_style::Theme;
 pub use state::State;
 use window_clipboard::mime::ClipboardStoreData;
 use winit::raw_window_handle::HasWindowHandle;
@@ -459,6 +457,7 @@ async fn run_instance<A, E, C>(
             window::Id::MAIN,
             user_interface::Cache::default(),
         )]),
+        &mut clipboard,
     ));
 
     run_command(
@@ -891,6 +890,7 @@ async fn run_instance<A, E, C>(
                                     &mut debug,
                                     &mut window_manager,
                                     cached_interfaces,
+                                    &mut clipboard,
                                 ));
                         }
 
@@ -1665,6 +1665,7 @@ fn run_command<A, C, E>(
                     debug,
                     window_manager,
                     std::mem::take(ui_caches),
+                    clipboard,
                 );
 
                 while let Some(mut operation) = current_operation.take() {
@@ -1766,6 +1767,7 @@ pub fn build_user_interfaces<'a, A: Application, C: Compositor>(
     debug: &mut Debug,
     window_manager: &mut WindowManager<A, C>,
     mut cached_user_interfaces: HashMap<window::Id, user_interface::Cache>,
+    clipboard: &mut Clipboard<A::Message>,
 ) -> HashMap<window::Id, UserInterface<'a, A::Message, A::Theme, A::Renderer>>
 where
     A::Theme: StyleSheet,
@@ -1775,18 +1777,32 @@ where
         .drain()
         .filter_map(|(id, cache)| {
             let window = window_manager.get_mut(id)?;
-
-            Some((
+            let interface = build_user_interface(
+                application,
+                cache,
+                &mut window.renderer,
+                window.state.logical_size(),
+                debug,
                 id,
-                build_user_interface(
-                    application,
-                    cache,
-                    &mut window.renderer,
-                    window.state.logical_size(),
-                    debug,
-                    id,
-                ),
-            ))
+            );
+
+            let dnd_rectangles = interface
+                .dnd_rectangles(window.prev_dnd_destination_rectangles_count);
+            let new_dnd_rectangles_count = dnd_rectangles.as_ref().len();
+
+            if new_dnd_rectangles_count > 0
+                || window.prev_dnd_destination_rectangles_count > 0
+            {
+                clipboard.register_dnd_destination(
+                    DndSurface(Arc::new(Box::new(window.raw.clone()))),
+                    dnd_rectangles.into_rectangles(),
+                );
+            }
+
+            window.prev_dnd_destination_rectangles_count =
+                new_dnd_rectangles_count;
+
+            Some((id, interface))
         })
         .collect()
 }
