@@ -1339,7 +1339,9 @@ where
                             }
                         }
                         platform_specific::wayland::session_lock::Action::Unlock => {
-                            self.state.session_lock.take();
+                            if let Some(session_lock) = self.state.session_lock.take() {
+                                session_lock.unlock();
+                            }
                             // Make sure server processes unlock before client exits
                             let _ = self.state.connection.roundtrip();
                             sticky_exit_callback(
