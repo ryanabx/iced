@@ -1389,7 +1389,9 @@ where
                             }
                         }
                         platform_specific::wayland::session_lock::Action::Unlock => {
-                            self.state.session_lock.take();
+                            if let Some(session_lock) = self.state.session_lock.take() {
+                                session_lock.unlock();
+                            }
                             // Make sure server processes unlock before client exits
                             let _ = self.state.connection.roundtrip();
                             sticky_exit_callback(
@@ -1416,7 +1418,15 @@ where
                                     s.id == id
                                 })
                             {
-                                self.state.lock_surfaces.remove(i);
+                                let surface = self.state.lock_surfaces.remove(i);
+                                sticky_exit_callback(
+                                    IcedSctkEvent::SctkEvent(SctkEvent::SessionLockSurfaceDone {
+                                        surface: surface.session_lock_surface.wl_surface().clone()
+                                    }),
+                                    &self.state,
+                                    &mut control_flow,
+                                    &mut callback,
+                                );
                             }
                         }
                     }
