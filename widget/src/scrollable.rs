@@ -1,5 +1,6 @@
 //! Navigate an endless amount of content with a scrollbar.
 use crate::container;
+use dnd::DndEvent;
 use iced_runtime::core::widget::Id;
 use iced_style::core::clipboard::DndDestinationRectangles;
 #[cfg(feature = "a11y")]
@@ -605,7 +606,7 @@ where
             let mut my_dnd_rectangles = DndDestinationRectangles::new();
             self.content.as_widget().drag_destinations(
                 c_state,
-                layout,
+                c_layout,
                 &mut my_dnd_rectangles,
             );
             let mut my_dnd_rectangles = my_dnd_rectangles.into_rectangles();
@@ -734,6 +735,20 @@ pub fn update<Message>(
         };
 
         let translation = state.translation(direction, bounds, content_bounds);
+
+        if let Event::Dnd(DndEvent::Offer(_, e)) = &mut event {
+            match e {
+                dnd::OfferEvent::Enter { x, y, .. } => {
+                    *x += f64::from(translation.x);
+                    *y += f64::from(translation.y);
+                }
+                dnd::OfferEvent::Motion { x, y } => {
+                    *x += f64::from(translation.x);
+                    *y += f64::from(translation.y);
+                }
+                _ => {}
+            }
+        }
 
         #[cfg(feature = "wayland")]
         if let Event::PlatformSpecific(
