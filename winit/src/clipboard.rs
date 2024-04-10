@@ -86,6 +86,32 @@ impl<M: Send + 'static> Clipboard<M> {
         }
     }
 
+    /// Reads the current content of the Primary as text.
+    pub fn read_primary(&self) -> Option<String> {
+        match &self.state {
+            State::Connected(clipboard, _) => {
+                clipboard.read_primary().and_then(|res| res.ok())
+            }
+            State::Unavailable => None,
+        }
+    }
+
+    /// Writes the given text contents to the Primary.
+    pub fn write_primary(&mut self, contents: String) {
+        match &mut self.state {
+            State::Connected(clipboard, _) => {
+                match clipboard.write_primary(contents) {
+                    Some(Ok(())) => {}
+                    Some(Err(error)) => {
+                        log::warn!("error writing to clipboard: {error}");
+                    }
+                    None => {} //Primary not available
+                }
+            }
+            State::Unavailable => {}
+        }
+    }
+
     //
     pub(crate) fn start_dnd_winit(
         &self,
@@ -112,77 +138,76 @@ impl<M: Send + 'static> Clipboard<M> {
 
 impl<M> crate::core::Clipboard for Clipboard<M> {
     fn read(&self, kind: Kind) -> Option<String> {
-        self.read(kind)
+        match kind {
+            Kind::Primary => match &self.state {
+                State::Connected(clipboard, _) => {
+                    clipboard.read_primary().and_then(|res| res.ok())
+                }
+                State::Unavailable => None,
+            },
+            Kind::Standard => match &self.state {
+                State::Connected(clipboard, _) => clipboard.read().ok(),
+                State::Unavailable => None,
+            },
+        }
     }
 
     fn write(&mut self, kind: Kind, contents: String) {
-        self.write(kind, contents);
-    }
-
-    fn read_primary(&self) -> Option<String> {
-        match &self.state {
-            State::Connected(clipboard, _) => {
-                clipboard.read_primary().and_then(|res| res.ok())
-            }
-            State::Unavailable => None,
+        match kind {
+            Kind::Primary => match &mut self.state {
+                State::Connected(clipboard, _) => {
+                    _ = clipboard.write_primary(contents)
+                }
+                State::Unavailable => {}
+            },
+            Kind::Standard => match &mut self.state {
+                State::Connected(clipboard, _) => _ = clipboard.write(contents),
+                State::Unavailable => {}
+            },
         }
     }
 
-    fn write_primary(&mut self, contents: String) {
-        match &mut self.state {
-            State::Connected(clipboard, _) => {
-                _ = clipboard.write_primary(contents)
-            }
-            State::Unavailable => {}
-        }
-    }
-
-    fn read_data(&self, mimes: Vec<String>) -> Option<(Vec<u8>, String)> {
-        match &self.state {
-            State::Connected(clipboard, _) => {
-                clipboard.read_raw(mimes).and_then(|res| res.ok())
-            }
-            State::Unavailable => None,
+    fn read_data(
+        &self,
+        kind: Kind,
+        mimes: Vec<String>,
+    ) -> Option<(Vec<u8>, String)> {
+        match kind {
+            Kind::Primary => match &self.state {
+                State::Connected(clipboard, _) => {
+                    clipboard.read_primary_raw(mimes).and_then(|res| res.ok())
+                }
+                State::Unavailable => None,
+            },
+            Kind::Standard => match &self.state {
+                State::Connected(clipboard, _) => {
+                    clipboard.read_raw(mimes).and_then(|res| res.ok())
+                }
+                State::Unavailable => None,
+            },
         }
     }
 
     fn write_data(
         &mut self,
+        kind: Kind,
         contents: ClipboardStoreData<
             Box<dyn Send + Sync + 'static + mime::AsMimeTypes>,
         >,
     ) {
-        match &mut self.state {
-            State::Connected(clipboard, _) => {
-                _ = clipboard.write_data(contents)
-            }
-            State::Unavailable => {}
-        }
-    }
-
-    fn read_primary_data(
-        &self,
-        mimes: Vec<String>,
-    ) -> Option<(Vec<u8>, String)> {
-        match &self.state {
-            State::Connected(clipboard, _) => {
-                clipboard.read_primary_raw(mimes).and_then(|res| res.ok())
-            }
-            State::Unavailable => None,
-        }
-    }
-
-    fn write_primary_data(
-        &mut self,
-        contents: ClipboardStoreData<
-            Box<dyn Send + Sync + 'static + mime::AsMimeTypes>,
-        >,
-    ) {
-        match &mut self.state {
-            State::Connected(clipboard, _) => {
-                _ = clipboard.write_primary_data(contents)
-            }
-            State::Unavailable => {}
+        match kind {
+            Kind::Primary => match &mut self.state {
+                State::Connected(clipboard, _) => {
+                    _ = clipboard.write_primary_data(contents)
+                }
+                State::Unavailable => {}
+            },
+            Kind::Standard => match &mut self.state {
+                State::Connected(clipboard, _) => {
+                    _ = clipboard.write_data(contents)
+                }
+                State::Unavailable => {}
+            },
         }
     }
 
