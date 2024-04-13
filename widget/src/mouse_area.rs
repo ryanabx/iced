@@ -119,11 +119,19 @@ impl<'a, Message, Theme, Renderer> MouseArea<'a, Message, Theme, Renderer> {
 }
 
 /// Local state of the [`MouseArea`].
-#[derive(Default)]
 struct State {
     is_hovered: bool,
     // TODO: Support on_mouse_enter and on_mouse_exit
     drag_initiated: Option<Point>,
+    is_out_of_bounds: bool,
+}
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            drag_initiated: Default::default(),
+            is_out_of_bounds: true,
+        }
+    }
 }
 
 impl<'a, Message, Theme, Renderer> MouseArea<'a, Message, Theme, Renderer> {
@@ -281,7 +289,6 @@ where
             viewport,
         );
     }
-
     fn overlay<'b>(
         &'b mut self,
         tree: &'b mut Tree,
@@ -296,7 +303,6 @@ where
             translation,
         )
     }
-
     fn drag_destinations(
         &self,
         state: &Tree,
@@ -367,6 +373,23 @@ fn update<Message: Clone, Theme, Renderer>(
     }
 
     if !cursor.is_over(layout.bounds()) {
+        if !state.is_out_of_bounds {
+            if widget
+                .on_mouse_enter
+                .as_ref()
+                .or(widget.on_mouse_exit.as_ref())
+                .is_some()
+            {
+                if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
+                    state.is_out_of_bounds = true;
+                    if let Some(message) = widget.on_mouse_exit.as_ref() {
+                        shell.publish(message.clone());
+                    }
+                    return event::Status::Captured;
+                }
+            }
+        }
+
         return event::Status::Ignored;
     }
 
@@ -432,6 +455,21 @@ fn update<Message: Clone, Theme, Renderer>(
             shell.publish(message.clone());
 
             return event::Status::Captured;
+        }
+    }
+    if let Some(message) = widget
+        .on_mouse_enter
+        .as_ref()
+        .or(widget.on_mouse_exit.as_ref())
+    {
+        if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
+            if state.is_out_of_bounds {
+                state.is_out_of_bounds = false;
+                if widget.on_mouse_enter.is_some() {
+                    shell.publish(message.clone());
+                }
+                return event::Status::Captured;
+            }
         }
     }
 
