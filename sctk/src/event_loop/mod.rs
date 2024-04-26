@@ -203,6 +203,7 @@ where
                 lock_surfaces: Vec::new(),
                 dnd_source: None,
                 _kbd_focus: None,
+                touch_points: HashMap::new(),
                 sctk_events: Vec::new(),
                 frame_events: Vec::new(),
                 pending_user_events: Vec::new(),
@@ -1141,9 +1142,9 @@ where
                                     Some(s) => s,
                                     None => continue,
                                 };
-                                let serial = match seat.last_ptr_press {
-                                    Some(s) => s.2,
-                                    None => continue,
+                                // Get last pointer press or touch down serial, whichever is newer
+                                let Some(serial) = seat.last_ptr_press.map(|s| s.2).max(seat.last_touch_down.map(|s| s.2)) else {
+                                    continue;
                                 };
 
                                 let origin = match self
