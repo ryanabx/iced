@@ -307,12 +307,14 @@ where
         &self,
         state: &Tree,
         layout: Layout<'_>,
+        renderer: &Renderer,
         dnd_rectangles: &mut iced_style::core::clipboard::DndDestinationRectangles,
     ) {
         if let Some(state) = state.children.iter().next() {
             self.content.as_widget().drag_destinations(
                 state,
                 layout,
+                renderer,
                 dnd_rectangles,
             );
         }

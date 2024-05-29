@@ -1,5 +1,7 @@
 //! Implement your own event loop to drive a user interface.
+
 use iced_core::clipboard::DndDestinationRectangles;
+use iced_core::widget::tree::NAMED;
 use iced_core::widget::{Operation, OperationOutputWrapper};
 
 use crate::core::event::{self, Event};
@@ -96,6 +98,11 @@ where
         let mut root = root.into();
 
         let Cache { mut state } = cache;
+        NAMED.with(|named| {
+            let mut guard = named.borrow_mut();
+            *guard = state.take_all_named();
+        });
+
         state.diff(root.as_widget_mut());
 
         let base = root.as_widget().layout(
@@ -103,6 +110,10 @@ where
             renderer,
             &layout::Limits::new(Size::ZERO, bounds),
         );
+
+        NAMED.with(|named| {
+            named.borrow_mut().clear();
+        });
 
         UserInterface {
             root,
@@ -635,11 +646,13 @@ where
     pub fn dnd_rectangles(
         &self,
         prev_capacity: usize,
+        renderer: &Renderer,
     ) -> DndDestinationRectangles {
         let mut ret = DndDestinationRectangles::with_capacity(prev_capacity);
         self.root.as_widget().drag_destinations(
             &self.state,
             Layout::new(&self.base),
+            renderer,
             &mut ret,
         );
         ret

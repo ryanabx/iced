@@ -620,6 +620,7 @@ where
         &self,
         tree: &Tree,
         layout: Layout<'_>,
+        renderer: &Renderer,
         dnd_rectangles: &mut iced_style::core::clipboard::DndDestinationRectangles,
     ) {
         let my_state = tree.state.downcast_ref::<State>();
@@ -630,6 +631,7 @@ where
             self.content.as_widget().drag_destinations(
                 c_state,
                 c_layout,
+                renderer,
                 &mut my_dnd_rectangles,
             );
             let mut my_dnd_rectangles = my_dnd_rectangles.into_rectangles();
