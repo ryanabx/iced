@@ -137,12 +137,18 @@ impl<M: Send + 'static> Clipboard<M> {
 }
 
 impl<M> crate::core::Clipboard for Clipboard<M> {
-    fn read(&self, kind: Kind) -> Option<String> {
-        self.read(kind)
+    fn read(&self) -> Option<String> {
+        match &self.state {
+            State::Connected(clipboard, _) => clipboard.read().ok(),
+            State::Unavailable => None,
+        }
     }
 
-    fn write(&mut self, kind: Kind, contents: String) {
-        self.write(kind, contents);
+    fn write(&mut self, contents: String) {
+        match &mut self.state {
+            State::Connected(clipboard, _) => _ = clipboard.write(contents),
+            State::Unavailable => {}
+        }
     }
 
     fn read_primary(&self) -> Option<String> {
