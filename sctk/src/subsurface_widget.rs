@@ -26,6 +26,7 @@ use sctk::{
     compositor::SurfaceData,
     globals::GlobalData,
     reexports::client::{
+        delegate_noop,
         protocol::{
             wl_buffer::{self, WlBuffer},
             wl_compositor::WlCompositor,
@@ -40,6 +41,10 @@ use sctk::{
 };
 use wayland_backend::client::ObjectId;
 use wayland_protocols::wp::{
+    alpha_modifier::v1::client::{
+        wp_alpha_modifier_surface_v1::WpAlphaModifierSurfaceV1,
+        wp_alpha_modifier_v1::WpAlphaModifierV1,
+    },
     linux_dmabuf::zv1::client::{
         zwp_linux_buffer_params_v1::{self, ZwpLinuxBufferParamsV1},
         zwp_linux_dmabuf_v1::{self, ZwpLinuxDmabufV1},
@@ -312,8 +317,10 @@ pub struct SubsurfaceState<T> {
     pub wp_viewporter: WpViewporter,
     pub wl_shm: WlShm,
     pub wp_dmabuf: Option<ZwpLinuxDmabufV1>,
+    pub wp_alpha_modifier: Option<WpAlphaModifierV1>,
     pub qh: QueueHandle<SctkState<T>>,
     pub(crate) buffers: HashMap<WeakBufferSource, Vec<WlBuffer>>,
+    pub unmapped_subsurfaces: Vec<SubsurfaceInstance>,
 }
 
 impl<T: Debug + 'static> SubsurfaceState<T> {
@@ -340,10 +347,16 @@ impl<T: Debug + 'static> SubsurfaceState<T> {
             sctk::globals::GlobalData,
         );
 
+        let wp_alpha_modifier_surface =
+            self.wp_alpha_modifier.as_ref().map(|wp_alpha_modifier| {
+                wp_alpha_modifier.get_surface(&wl_surface, &self.qh, ())
+            });
+
         SubsurfaceInstance {
             wl_surface,
             wl_subsurface,
             wp_viewport,
+            wp_alpha_modifier_surface,
             wl_buffer: None,
             bounds: None,
         }
@@ -358,6 +371,13 @@ impl<T: Debug + 'static> SubsurfaceState<T> {
         subsurfaces: &mut Vec<SubsurfaceInstance>,
         view_subsurfaces: &[SubsurfaceInfo],
     ) {
+        // Subsurfaces aren't destroyed immediately to sync removal with parent
+        // surface commit. Since `destroy` is immediate.
+        //
+        // They should be safe to destroy by the next time `update_subsurfaces`
+        // is run.
+        self.unmapped_subsurfaces.clear();
+
         // Remove cached `wl_buffers` for any `BufferSource`s that no longer exist.
         self.buffers.retain(|k, v| {
             let retain = k.0.strong_count() > 0;
@@ -368,9 +388,11 @@ impl<T: Debug + 'static> SubsurfaceState<T> {
         });
 
         // If view requested fewer subsurfaces than there currently are,
-        // destroy excess.
-        if view_subsurfaces.len() < subsurfaces.len() {
-            subsurfaces.truncate(view_subsurfaces.len());
+        // unmap excess.
+        while view_subsurfaces.len() < subsurfaces.len() {
+            let subsurface = subsurfaces.pop().unwrap();
+            subsurface.unmap();
+            self.unmapped_subsurfaces.push(subsurface);
         }
         // Create new subsurfaces if there aren't enough.
         while subsurfaces.len() < view_subsurfaces.len() {
@@ -443,6 +465,7 @@ pub(crate) struct SubsurfaceInstance {
     pub(crate) wl_surface: WlSurface,
     wl_subsurface: WlSubsurface,
     wp_viewport: WpViewport,
+    wp_alpha_modifier_surface: Option<WpAlphaModifierSurfaceV1>,
     wl_buffer: Option<WlBuffer>,
     bounds: Option<Rectangle<f32>>,
 }
@@ -509,6 +532,12 @@ impl SubsurfaceInstance {
             self.wl_surface.commit();
         }
 
+        if let Some(wp_alpha_modifier_surface) = &self.wp_alpha_modifier_surface
+        {
+            let alpha = (info.alpha.clamp(0.0, 1.0) * u32::MAX as f32) as u32;
+            wp_alpha_modifier_surface.set_multiplier(alpha);
+        }
+
         subsurface_ids.insert(
             self.wl_surface.id(),
             (info.bounds.x as i32, info.bounds.y as i32, parent_id),
@@ -516,6 +545,11 @@ impl SubsurfaceInstance {
 
         self.wl_buffer = Some(buffer);
         self.bounds = Some(info.bounds);
+    }
+
+    pub fn unmap(&self) {
+        self.wl_surface.attach(None, 0, 0);
+        self.wl_surface.commit();
     }
 }
 
@@ -533,6 +567,7 @@ impl Drop for SubsurfaceInstance {
 pub(crate) struct SubsurfaceInfo {
     pub buffer: SubsurfaceBuffer,
     pub bounds: Rectangle<f32>,
+    pub alpha: f32,
 }
 
 thread_local! {
@@ -550,6 +585,7 @@ pub struct Subsurface<'a> {
     width: Length,
     height: Length,
     content_fit: ContentFit,
+    alpha: f32,
 }
 
 impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
@@ -603,6 +639,7 @@ where
             subsurfaces.borrow_mut().push(SubsurfaceInfo {
                 buffer: self.buffer.clone(),
                 bounds: layout.bounds(),
+                alpha: self.alpha,
             })
         });
     }
@@ -621,6 +658,7 @@ impl<'a> Subsurface<'a> {
             width: Length::Shrink,
             height: Length::Shrink,
             content_fit: ContentFit::Contain,
+            alpha: 1.,
         }
     }
 
@@ -638,6 +676,11 @@ impl<'a> Subsurface<'a> {
         self.content_fit = content_fit;
         self
     }
+
+    pub fn alpha(mut self, alpha: f32) -> Self {
+        self.alpha = alpha;
+        self
+    }
 }
 
 impl<'a, Message, Theme, Renderer> From<Subsurface<'a>>
@@ -650,3 +693,6 @@ where
         Self::new(subsurface)
     }
 }
+
+delegate_noop!(@<T: 'static + Debug> SctkState<T>: ignore WpAlphaModifierV1);
+delegate_noop!(@<T: 'static + Debug> SctkState<T>: ignore WpAlphaModifierSurfaceV1);
