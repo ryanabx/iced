@@ -9,7 +9,7 @@ use crate::application::SurfaceIdWrapper;
 use crate::{
     application::Event,
     conversion,
-    dpi::LogicalSize,
+    dpi::{LogicalPosition, LogicalSize, PhysicalPosition},
     handlers::{
         activation::IcedRequestData,
         wp_fractional_scaling::FractionalScalingManager,
@@ -47,7 +47,11 @@ use sctk::{
     registry::RegistryState,
     seat::SeatState,
     session_lock::SessionLockState,
-    shell::{wlr_layer::LayerShell, xdg::XdgShell, WaylandSurface},
+    shell::{
+        wlr_layer::{LayerShell, LayerSurface},
+        xdg::XdgShell,
+        WaylandSurface,
+    },
     shm::Shm,
 };
 use sctk::{
@@ -293,6 +297,8 @@ where
     {
         let mut control_flow = ControlFlow::Poll;
 
+        let mut cursor_position = HashMap::<_, LogicalPosition<f64>>::new();
+
         callback(
             IcedSctkEvent::NewEvents(StartCause::Init),
             &self.state,
@@ -325,6 +331,11 @@ where
             .registry_state
             .bind_one(&self.state.queue_handle, 2..=4, GlobalData)
             .ok();
+        let wp_alpha_modifier = self
+            .state
+            .registry_state
+            .bind_one(&self.state.queue_handle, 1..=1, ())
+            .ok();
         if let Ok(wl_subcompositor) = wl_subcompositor {
             if let Ok(wp_viewporter) = wp_viewporter {
                 callback(
@@ -334,8 +345,10 @@ where
                         wp_viewporter,
                         wl_shm,
                         wp_dmabuf,
+                        wp_alpha_modifier,
                         qh: self.state.queue_handle.clone(),
                         buffers: HashMap::new(),
+                        unmapped_subsurfaces: Vec::new(),
                     }),
                     &self.state,
                     &mut control_flow,
@@ -570,6 +583,18 @@ where
             // Handle pending sctk events.
             for event in sctk_event_sink_back_buffer.drain(..) {
                 match event {
+                    SctkEvent::PointerEvent { ref variant, .. } => {
+                        let surface_id = variant.surface.id();
+
+                        cursor_position.insert(
+                            surface_id,
+                            LogicalPosition::new(
+                                variant.position.0,
+                                variant.position.1,
+                            ),
+                        );
+                    }
+
                     SctkEvent::PopupEvent {
                         variant: PopupEventVariant::Done,
                         toplevel_id,
@@ -598,13 +623,18 @@ where
                                     &mut callback,
                                 );
                             }
-                            None => continue,
+                            None => (),
                         };
+
+                        continue;
                     }
+
                     SctkEvent::LayerSurfaceEvent {
                         variant: LayerSurfaceEventVariant::Done,
                         id,
                     } => {
+                        cursor_position.remove(&id.id());
+
                         if let Some(i) =
                             self.state.layer_surfaces.iter().position(|l| {
                                 l.surface.wl_surface().id() == id.id()
@@ -623,7 +653,10 @@ where
                                 &mut callback,
                             );
                         }
+
+                        continue;
                     }
+
                     SctkEvent::WindowEvent {
                         variant: WindowEventVariant::Close,
                         id,
@@ -647,14 +680,18 @@ where
                                 &mut callback,
                             );
                         }
+
+                        continue;
                     }
-                    _ => sticky_exit_callback(
-                        IcedSctkEvent::SctkEvent(event),
-                        &self.state,
-                        &mut control_flow,
-                        &mut callback,
-                    ),
+                    _ => (),
                 }
+
+                sticky_exit_callback(
+                    IcedSctkEvent::SctkEvent(event),
+                    &self.state,
+                    &mut control_flow,
+                    &mut callback,
+                )
             }
 
             // handle events indirectly via callback to the user.
@@ -801,9 +838,10 @@ where
                         },
                     },
                     Event::SetCursor(iced_icon) => {
-                        if let Some(ptr) = self.state.seats.get(0).and_then(|s| s.ptr.as_ref()) {
+                        if let Some(seat) = self.state.seats.get_mut(0) {
                             let icon = conversion::cursor_icon(iced_icon);
-                            let _ = ptr.set_cursor(self.wayland_dispatcher.as_source_ref().connection(), icon);
+                            seat.icon = Some(icon);
+                            seat.set_cursor(self.wayland_dispatcher.as_source_ref().connection(), icon);
                         }
 
                     }
@@ -838,18 +876,12 @@ where
                         },
                         platform_specific::wayland::window::Action::Size { id, width, height } => {
                             if let Some(window) = self.state.windows.iter_mut().find(|w| w.id == id) {
-                                window.set_size(LogicalSize::new(NonZeroU32::new(width).unwrap_or(NonZeroU32::new(1).unwrap()), NonZeroU32::new(1).unwrap()));
+                                window.set_size(LogicalSize::new(NonZeroU32::new(width).unwrap_or(NonZeroU32::new(1).unwrap()), NonZeroU32::new(height).unwrap_or(NonZeroU32::new(1).unwrap())));
                                 // TODO Ashley maybe don't force window size?
                                 pending_redraws.push(window.window.wl_surface().id());
-
-                                if let Some(mut prev_configure) = window.last_configure.clone() {
-                                    let (width, height) = (
-                                        NonZeroU32::new(width).unwrap_or(NonZeroU32::new(1).unwrap()),
-                                        NonZeroU32::new(height).unwrap_or(NonZeroU32::new(1).unwrap()),
-                                    );
-                                    prev_configure.new_size = (Some(width), Some(height));
+                                if window.last_configure.is_some() {
                                     sticky_exit_callback(
-                                        IcedSctkEvent::SctkEvent(SctkEvent::WindowEvent { variant: WindowEventVariant::Configure(prev_configure, window.window.wl_surface().clone(), false), id: window.window.wl_surface().clone()}),
+                                        IcedSctkEvent::SctkEvent(SctkEvent::WindowEvent { variant: WindowEventVariant::Size(window.current_size, window.window.wl_surface().clone(), false), id: window.window.wl_surface().clone()}),
                                         &self.state,
                                         &mut control_flow,
                                         &mut callback,
@@ -930,7 +962,21 @@ where
                                 }
                             }
                         },
-                        platform_specific::wayland::window::Action::ShowWindowMenu { id: _, x: _, y: _ } => todo!(),
+                        platform_specific::wayland::window::Action::ShowWindowMenu { id } => {
+                            if let (Some(window), Some((seat, last_press))) = (self.state.windows.iter_mut().find(|w| w.id == id), self.state.seats.first().and_then(|seat| seat.last_ptr_press.map(|p| (&seat.seat, p.2)))) {
+                                let surface_id = window.window.wl_surface().id();
+
+                                let cursor_position = cursor_position.get(&surface_id)
+                                    .cloned()
+                                    .unwrap_or_default();
+
+                                // Cursor position does not need to be scaled here.
+                                let PhysicalPosition { x, y } = cursor_position.to_physical::<i32>(1.0);
+
+                                window.window.xdg_toplevel().show_window_menu(seat, last_press, x as i32, y as i32);
+                                to_commit.insert(id, window.window.wl_surface().clone());
+                            }
+                        },
                         platform_specific::wayland::window::Action::Destroy(id) => {
                             if let Some(i) = self.state.windows.iter().position(|l| l.id == id) {
                                 let window = self.state.windows.remove(i);
