@@ -147,10 +147,8 @@ impl editor::Editor for Editor {
                                 Some(Rectangle {
                                     x,
                                     width,
-                                    y: (visual_line as i32
-                                        + visual_lines_offset)
-                                        as f32
-                                        * line_height,
+                                    y: (visual_line as f32) * line_height
+                                        + visual_lines_offset,
                                     height: line_height,
                                 })
                             } else {
@@ -235,8 +233,7 @@ impl editor::Editor for Editor {
 
                     Cursor::Caret(Point::new(
                         offset,
-                        (visual_lines_offset + visual_line as i32) as f32
-                            * line_height,
+                        visual_line as f32 * line_height + visual_lines_offset,
                     ))
                 }
             }
@@ -568,8 +565,8 @@ impl editor::Editor for Editor {
             internal.editor.with_buffer_mut(|buffer| {
                 buffer.set_size(
                     font_system.raw(),
-                    new_bounds.width,
-                    new_bounds.height,
+                    Some(new_bounds.width),
+                    Some(new_bounds.height),
                 )
             });
 
@@ -602,8 +599,10 @@ impl editor::Editor for Editor {
         let internal = self.internal();
 
         let last_visible_line = internal.editor.with_buffer(|buffer| {
+            let metrics = buffer.metrics();
             let scroll = buffer.scroll();
-            let mut window = scroll.layout + buffer.visible_lines();
+            let mut window =
+                scroll.vertical + buffer.size().1.unwrap_or(f32::MAX);
 
             buffer
                 .lines
@@ -611,14 +610,20 @@ impl editor::Editor for Editor {
                 .enumerate()
                 .skip(scroll.line)
                 .find_map(|(i, line)| {
-                    let visible_lines = line
+                    let layout = line
                         .layout_opt()
                         .as_ref()
-                        .expect("Line layout should be cached")
-                        .len() as i32;
+                        .expect("Line layout should be cached");
 
-                    if window > visible_lines {
-                        window -= visible_lines;
+                    let mut layout_height = 0.0;
+                    for layout_line in layout.iter() {
+                        layout_height += layout_line
+                            .line_height_opt
+                            .unwrap_or(metrics.line_height);
+                    }
+
+                    if window > layout_height {
+                        window -= layout_height;
                         None
                     } else {
                         Some(i)
@@ -796,22 +801,28 @@ fn highlight_line(
     })
 }
 
-fn visual_lines_offset(line: usize, buffer: &cosmic_text::Buffer) -> i32 {
+fn visual_lines_offset(line: usize, buffer: &cosmic_text::Buffer) -> f32 {
+    let metrics = buffer.metrics();
     let scroll = buffer.scroll();
-    let visual_lines_before_start: usize = buffer
+
+    let mut height_before_start = 0.0;
+    buffer
         .lines
         .iter()
         .skip(scroll.line)
         .take(line)
         .map(|line| {
-            line.layout_opt()
+            let layout = line
+                .layout_opt()
                 .as_ref()
-                .expect("Line layout should be cached")
-                .len()
-        })
-        .sum();
+                .expect("Line layout should be cached");
+            for layout_line in layout.iter() {
+                height_before_start +=
+                    layout_line.line_height_opt.unwrap_or(metrics.line_height);
+            }
+        });
 
-    visual_lines_before_start as i32 - scroll.layout
+    height_before_start - scroll.vertical
 }
 
 fn motion_to_action(motion: Motion) -> cosmic_text::Action {
