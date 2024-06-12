@@ -51,7 +51,7 @@ impl Text {
         let layout = buffer.layout(
             font_system.raw(),
             self.size.0,
-            f32::MAX,
+            None,
             cosmic_text::Wrap::None,
             None,
             8,
