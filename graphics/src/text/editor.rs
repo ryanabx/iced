@@ -565,8 +565,8 @@ impl editor::Editor for Editor {
             internal.editor.with_buffer_mut(|buffer| {
                 buffer.set_size(
                     font_system.raw(),
-                    new_bounds.width,
-                    new_bounds.height,
+                    Some(new_bounds.width),
+                    Some(new_bounds.height),
                 )
             });
 
@@ -601,7 +601,8 @@ impl editor::Editor for Editor {
         let last_visible_line = internal.editor.with_buffer(|buffer| {
             let metrics = buffer.metrics();
             let scroll = buffer.scroll();
-            let mut window = scroll.vertical + buffer.size().1;
+            let mut window =
+                scroll.vertical + buffer.size().1.unwrap_or(f32::MAX);
 
             buffer
                 .lines
