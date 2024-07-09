@@ -35,37 +35,36 @@ impl<T: Debug> PointerHandler for SctkState<T> {
                 .iter()
                 .find(|w| w.window.wl_surface() == &e.surface)
                 .and_then(|w| {
-                    w.resizable.zip(w.current_size).and_then(
-                        |(border, (width, height))| {
-                            let (width, height) =
-                                (width.get() as f64, height.get() as f64);
-                            let (x, y) = e.position;
-                            let left_edge = x < border;
-                            let top_edge = y < border;
-                            let right_edge = x > width - border;
-                            let bottom_edge = y > height - border;
+                    w.resizable.and_then(|border| {
+                        let (width, height) = w.current_size;
+                        let (width, height) =
+                            (width.get() as f64, height.get() as f64);
+                        let (x, y) = e.position;
+                        let left_edge = x < border;
+                        let top_edge = y < border;
+                        let right_edge = x > width - border;
+                        let bottom_edge = y > height - border;
 
-                            if left_edge && top_edge {
-                                Some((ResizeEdge::TopLeft, w))
-                            } else if left_edge && bottom_edge {
-                                Some((ResizeEdge::BottomLeft, w))
-                            } else if right_edge && top_edge {
-                                Some((ResizeEdge::TopRight, w))
-                            } else if right_edge && bottom_edge {
-                                Some((ResizeEdge::BottomRight, w))
-                            } else if left_edge {
-                                Some((ResizeEdge::Left, w))
-                            } else if right_edge {
-                                Some((ResizeEdge::Right, w))
-                            } else if top_edge {
-                                Some((ResizeEdge::Top, w))
-                            } else if bottom_edge {
-                                Some((ResizeEdge::Bottom, w))
-                            } else {
-                                None
-                            }
-                        },
-                    )
+                        if left_edge && top_edge {
+                            Some((ResizeEdge::TopLeft, w))
+                        } else if left_edge && bottom_edge {
+                            Some((ResizeEdge::BottomLeft, w))
+                        } else if right_edge && top_edge {
+                            Some((ResizeEdge::TopRight, w))
+                        } else if right_edge && bottom_edge {
+                            Some((ResizeEdge::BottomRight, w))
+                        } else if left_edge {
+                            Some((ResizeEdge::Left, w))
+                        } else if right_edge {
+                            Some((ResizeEdge::Right, w))
+                        } else if top_edge {
+                            Some((ResizeEdge::Top, w))
+                        } else if bottom_edge {
+                            Some((ResizeEdge::Bottom, w))
+                        } else {
+                            None
+                        }
+                    })
                 })
             {
                 let icon = match resize_edge {
@@ -94,41 +93,24 @@ impl<T: Debug> PointerHandler for SctkState<T> {
                         return;
                     }
                     PointerEventKind::Motion { .. } => {
-                        if my_seat.icon != Some(icon) {
-                            let _ = my_seat
-                                .ptr
-                                .as_ref()
-                                .unwrap()
-                                .set_cursor(conn, icon);
-                            my_seat.icon = Some(icon);
+                        if my_seat.active_icon != Some(icon) {
+                            let _ = my_seat.set_cursor(conn, icon);
                         }
                         return;
                     }
-                    PointerEventKind::Enter { .. } => {
-                        my_seat.ptr_focus.replace(e.surface.clone());
-                        if my_seat.icon != Some(icon) {
-                            let _ = my_seat
-                                .ptr
-                                .as_ref()
-                                .unwrap()
-                                .set_cursor(conn, icon);
-                            my_seat.icon = Some(icon);
-                        }
-                    }
-                    PointerEventKind::Leave { .. } => {
-                        my_seat.ptr_focus.take();
-                        my_seat.icon = None;
-                    }
+                    PointerEventKind::Enter { .. } => {}
+                    PointerEventKind::Leave { .. } => {}
                     _ => {}
                 }
-                let _ = my_seat.ptr.as_ref().unwrap().set_cursor(conn, icon);
-            } else if my_seat.icon.is_some() {
-                let _ = my_seat
-                    .ptr
-                    .as_ref()
-                    .unwrap()
-                    .set_cursor(conn, CursorIcon::Default);
-                my_seat.icon = None;
+                if my_seat.active_icon != Some(icon) {
+                    my_seat.set_cursor(conn, icon);
+                }
+            } else if my_seat.active_icon != my_seat.icon {
+                // Restore cursor that was set by appliction, or default
+                my_seat.set_cursor(
+                    conn,
+                    my_seat.icon.unwrap_or(CursorIcon::Default),
+                );
             }
 
             if is_active {
@@ -144,7 +126,7 @@ impl<T: Debug> PointerHandler for SctkState<T> {
                 }
                 PointerEventKind::Leave { .. } => {
                     my_seat.ptr_focus.take();
-                    my_seat.icon = None;
+                    my_seat.active_icon = None;
                 }
                 PointerEventKind::Press {
                     time,

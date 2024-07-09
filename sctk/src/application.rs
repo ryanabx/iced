@@ -535,7 +535,12 @@ where
                         crate::sctk_event::WindowEventVariant::WmCapabilities(_)
                         | crate::sctk_event::WindowEventVariant::ConfigureBounds { .. } => {}
                         crate::sctk_event::WindowEventVariant::Configure(
-                            configure,
+                            current_size,
+                            _,
+                            wl_surface,
+                            first,
+                        ) | crate::sctk_event::WindowEventVariant::Size(
+                            current_size,
                             wl_surface,
                             first,
                         ) => {
@@ -543,6 +548,7 @@ where
                                 let Some(state) = states.get_mut(&id.inner()) else {
                                     continue;
                                 };
+                                let (w, h) = auto_size_surfaces.get(id).map_or_else(|| (current_size.0.get(), current_size.1.get()), |(w, h, _, _)| (*w, *h));
                                 if state.surface.is_none() {
                                     let wrapper = SurfaceDisplayWrapper {
                                         backend: backend.clone(),
@@ -553,16 +559,12 @@ where
                                             simple_clipboard = unsafe {Clipboard::connect(&h)};
                                         }
                                     }
-                                    let mut c_surface = compositor.create_surface(wrapper.clone(), configure.new_size.0.unwrap().get(), configure.new_size.1.unwrap().get());
-                                    compositor.configure_surface(&mut c_surface, configure.new_size.0.unwrap().get(), configure.new_size.1.unwrap().get());
+                                    let mut c_surface = compositor.create_surface(wrapper.clone(), w, h);
+                                    compositor.configure_surface(&mut c_surface, w, h);
                                     state.surface = Some(c_surface);
                                 }
-                                if let Some((w, h, _, is_dirty)) = auto_size_surfaces.get_mut(id) {
-                                    *is_dirty = first || *w != configure.new_size.0.map(|w| w.get()).unwrap_or_default() || *h != configure.new_size.1.map(|h| h.get()).unwrap_or_default();
-                                    state.set_logical_size(*w as f32, *h as f32);
-                                } else {
-                                    state.set_logical_size(configure.new_size.0.unwrap().get() as f32 , configure.new_size.1.unwrap().get() as f32);
-                                }
+                                state.set_logical_size(w as f32, h as f32);
+
                                 if first {
                                     let user_interface = build_user_interface(
                                         &application,
@@ -929,7 +931,7 @@ where
 
                 // just draw here immediately and never again for dnd icons
                 // TODO handle scale factor?
-                let _new_mouse_interaction = user_interface.draw(
+                let new_mouse_interaction = user_interface.draw(
                     &mut renderer,
                     state.theme(),
                     &Style {
@@ -939,6 +941,13 @@ where
                     },
                     state.cursor(),
                 );
+
+                mouse_interaction = new_mouse_interaction;
+                ev_proxy.send_event(Event::SetCursor(mouse_interaction));
+                // Pre-emptively remove cursor focus from other surface so they won't set cursor
+                for state in states.values_mut() {
+                    state.cursor_position = None;
+                }
 
                 let subsurfaces = crate::subsurface_widget::take_subsurfaces();
                 if let Some(subsurface_state) = subsurface_state.as_mut() {
@@ -1439,7 +1448,11 @@ where
                     }
 
                     debug.draw_finished();
-                    if new_mouse_interaction != mouse_interaction {
+
+                    // Set cursor if mouse interaction has changed, and surface has pointer focus
+                    if state.cursor_position.is_some()
+                        && new_mouse_interaction != mouse_interaction
+                    {
                         mouse_interaction = new_mouse_interaction;
                         ev_proxy
                             .send_event(Event::SetCursor(mouse_interaction));
