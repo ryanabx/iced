@@ -39,6 +39,7 @@ pub struct Menu<
     text_size: Option<Pixels>,
     text_line_height: text::LineHeight,
     text_shaping: text::Shaping,
+    text_wrap: text::Wrap,
     font: Option<Renderer::Font>,
     style: Theme::Style,
 }
@@ -70,6 +71,7 @@ where
             text_size: None,
             text_line_height: text::LineHeight::default(),
             text_shaping: text::Shaping::Advanced,
+            text_wrap: text::Wrap::default(),
             font: None,
             style: Default::default(),
         }
@@ -105,6 +107,12 @@ where
     /// Sets the [`text::Shaping`] strategy of the [`Menu`].
     pub fn text_shaping(mut self, shaping: text::Shaping) -> Self {
         self.text_shaping = shaping;
+        self
+    }
+
+    /// Sets the [`text::Wrap`] mode of the [`Menu`].
+    pub fn text_wrap(mut self, wrap: text::Wrap) -> Self {
+        self.text_wrap = wrap;
         self
     }
 
@@ -202,6 +210,7 @@ where
             text_size,
             text_line_height,
             text_shaping,
+            text_wrap,
             style,
         } = menu;
 
@@ -214,6 +223,7 @@ where
             text_size,
             text_line_height,
             text_shaping,
+            text_wrap,
             padding,
             style: style.clone(),
         }));
@@ -332,6 +342,7 @@ where
     text_size: Option<Pixels>,
     text_line_height: text::LineHeight,
     text_shaping: text::Shaping,
+    text_wrap: text::Wrap,
     font: Option<Renderer::Font>,
     style: Theme::Style,
 }
@@ -534,6 +545,7 @@ where
                     horizontal_alignment: alignment::Horizontal::Left,
                     vertical_alignment: alignment::Vertical::Center,
                     shaping: self.text_shaping,
+                    wrap: self.text_wrap,
                 },
                 Point::new(bounds.x + self.padding.left, bounds.center_y()),
                 if is_selected {

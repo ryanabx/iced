@@ -63,6 +63,7 @@ pub struct Checkbox<
     text_size: Option<Pixels>,
     text_line_height: text::LineHeight,
     text_shaping: text::Shaping,
+    text_wrap: text::Wrap,
     font: Option<Renderer::Font>,
     icon: Icon<Renderer::Font>,
     style: <Theme as StyleSheet>::Style,
@@ -101,6 +102,7 @@ where
             text_size: None,
             text_line_height: text::LineHeight::default(),
             text_shaping: text::Shaping::Advanced,
+            text_wrap: text::Wrap::default(),
             font: None,
             icon: Icon {
                 font: Renderer::ICON_FONT,
@@ -108,6 +110,7 @@ where
                 size: None,
                 line_height: text::LineHeight::default(),
                 shaping: text::Shaping::Advanced,
+                wrap: text::Wrap::default(),
             },
             style: Default::default(),
         }
@@ -174,6 +177,12 @@ where
     /// Sets the [`text::Shaping`] strategy of the [`Checkbox`].
     pub fn text_shaping(mut self, shaping: text::Shaping) -> Self {
         self.text_shaping = shaping;
+        self
+    }
+
+    /// Sets the [`text::Wrap`] mode of the [`Checkbox`].
+    pub fn text_wrap(mut self, wrap: text::Wrap) -> Self {
+        self.text_wrap = wrap;
         self
     }
 
@@ -277,6 +286,7 @@ where
                     alignment::Horizontal::Left,
                     alignment::Vertical::Top,
                     self.text_shaping,
+                    self.text_wrap,
                 )
             },
         )
@@ -368,6 +378,7 @@ where
                 size,
                 line_height,
                 shaping,
+                wrap,
             } = &self.icon;
             let size = size.unwrap_or(Pixels(bounds.height * 0.7));
 
@@ -382,6 +393,7 @@ where
                         horizontal_alignment: alignment::Horizontal::Center,
                         vertical_alignment: alignment::Vertical::Center,
                         shaping: *shaping,
+                        wrap: *wrap,
                     },
                     bounds.center(),
                     custom_style.icon_color,
@@ -520,4 +532,6 @@ pub struct Icon<Font> {
     pub line_height: text::LineHeight,
     /// The shaping strategy of the icon.
     pub shaping: text::Shaping,
+    /// The wrap mode of the icon.
+    pub wrap: text::Wrap,
 }
