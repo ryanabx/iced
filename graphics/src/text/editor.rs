@@ -493,9 +493,7 @@ impl editor::Editor for Editor {
     }
 
     fn min_bounds(&self) -> Size {
-        let internal = self.internal();
-
-        text::measure(internal.editor.buffer())
+        text::measure(self.buffer())
     }
 
     fn update(

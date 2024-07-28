@@ -7,7 +7,6 @@ use crate::window;
 
 use std::any::Any;
 use dnd::DndAction;
-use iced_futures::MaybeSend;
 
 use std::borrow::Cow;
 use std::fmt;
