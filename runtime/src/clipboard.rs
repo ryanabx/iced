@@ -22,7 +22,11 @@ pub enum Action<T> {
 
     #[allow(clippy::type_complexity)]
     /// Read the clipboard and produce `T` with the result.
-    ReadData(Vec<String>, Box<dyn Fn(Option<(Vec<u8>, String)>) -> T>, Kind),
+    ReadData(
+        Vec<String>,
+        Box<dyn Fn(Option<(Vec<u8>, String)>) -> T>,
+        Kind,
+    ),
 }
 
 impl<T> Action<T> {
@@ -39,9 +43,11 @@ impl<T> Action<T> {
                 Action::Read(Box::new(move |s| f(o(s))), target)
             }
             Self::Write(content, target) => Action::Write(content, target),
-            Self::WriteData(content, target) => Action::WriteData(content, target),
+            Self::WriteData(content, target) => {
+                Action::WriteData(content, target)
+            }
             Self::ReadData(a, o, target) => {
-                Action::ReadData(a, Box::new(move |s| f(o(s))))
+                Action::ReadData(a, Box::new(move |s| f(o(s))), target)
             }
         }
     }
@@ -52,8 +58,12 @@ impl<T> fmt::Debug for Action<T> {
         match self {
             Self::Read(_, target) => write!(f, "Action::Read{target:?}"),
             Self::Write(_, target) => write!(f, "Action::Write({target:?})"),
-            Self::WriteData(_, target) => write!(f, "Action::WriteData({target:?})"),
-            Self::ReadData(_, _, target) => write!(f, "Action::ReadData({target:?})"),
+            Self::WriteData(_, target) => {
+                write!(f, "Action::WriteData({target:?})")
+            }
+            Self::ReadData(_, _, target) => {
+                write!(f, "Action::ReadData({target:?})")
+            }
         }
     }
 }
@@ -94,20 +104,6 @@ pub fn write_primary<Message>(contents: String) -> Command<Message> {
     )))
 }
 
-/// Read the current contents of primary.
-pub fn read_primary<Message>(
-    f: impl Fn(Option<String>) -> Message + 'static,
-) -> Command<Message> {
-    Command::single(command::Action::Clipboard(Action::ReadPrimary(Box::new(
-        f,
-    ))))
-}
-
-/// Write the given contents to primary.
-pub fn write_primary<Message>(contents: String) -> Command<Message> {
-    Command::single(command::Action::Clipboard(Action::WritePrimary(contents)))
-}
-
 /// Read the current contents of the clipboard.
 pub fn read_data<T: AllowedMimeTypes + Send + Sync + 'static, Message>(
     f: impl Fn(Option<T>) -> Message + 'static,
@@ -115,6 +111,7 @@ pub fn read_data<T: AllowedMimeTypes + Send + Sync + 'static, Message>(
     Command::single(command::Action::Clipboard(Action::ReadData(
         T::allowed().into(),
         Box::new(move |d| f(d.and_then(|d| T::try_from(d).ok()))),
+        Kind::Standard,
     )))
 }
 
@@ -122,9 +119,10 @@ pub fn read_data<T: AllowedMimeTypes + Send + Sync + 'static, Message>(
 pub fn write_data<Message>(
     contents: impl AsMimeTypes + std::marker::Sync + std::marker::Send + 'static,
 ) -> Command<Message> {
-    Command::single(command::Action::Clipboard(Action::WriteData(Box::new(
-        contents,
-    ))))
+    Command::single(command::Action::Clipboard(Action::WriteData(
+        Box::new(contents),
+        Kind::Standard,
+    )))
 }
 
 /// Read the current contents of the clipboard.
@@ -134,9 +132,10 @@ pub fn read_primary_data<
 >(
     f: impl Fn(Option<T>) -> Message + 'static,
 ) -> Command<Message> {
-    Command::single(command::Action::Clipboard(Action::ReadPrimaryData(
+    Command::single(command::Action::Clipboard(Action::ReadData(
         T::allowed().into(),
         Box::new(move |d| f(d.and_then(|d| T::try_from(d).ok()))),
+        Kind::Primary,
     )))
 }
 
@@ -144,7 +143,8 @@ pub fn read_primary_data<
 pub fn write_primary_data<Message>(
     contents: impl AsMimeTypes + std::marker::Sync + std::marker::Send + 'static,
 ) -> Command<Message> {
-    Command::single(command::Action::Clipboard(Action::WritePrimaryData(
+    Command::single(command::Action::Clipboard(Action::WriteData(
         Box::new(contents),
+        Kind::Primary,
     )))
 }

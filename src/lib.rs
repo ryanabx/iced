@@ -218,7 +218,7 @@ pub use crate::core::border::{self, Border, Radius};
 pub use crate::core::color;
 pub use crate::core::gradient;
 pub use crate::core::{
-    id, layout::Limits, Alignment, Background, Border, Color, ContentFit, Degrees, Gradient,
+    id, layout::Limits, Alignment, Background, Color, ContentFit, Degrees, Gradient,
     Length, Padding, Pixels, Point, Radians, Rectangle, Shadow, Size,
     Transformation, Vector,
 };
@@ -228,7 +228,6 @@ pub mod clipboard {
     pub use crate::runtime::clipboard::{
         read, read_primary, write, write_primary, read_data, read_primary_data, write_data, write_primary_data
     };
-    pub use iced_core::clipboard::read_data;
     pub use window_clipboard::mime;
     pub use dnd;
 }

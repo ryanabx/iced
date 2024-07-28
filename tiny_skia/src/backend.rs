@@ -389,8 +389,8 @@ impl Backend {
                         );
                     } else {
                         let transform = tiny_skia::Transform::from_translate(
-                            translation.x,
-                            translation.y,
+                            transformation.translation().x,
+                            transformation.translation().y,
                         );
 
                         // Draw corners that have too small border radii as having no border radius,
@@ -566,7 +566,7 @@ impl Backend {
                 buffer,
                 position,
                 color,
-                clip_bounds: _, // TODO: Support text clip bounds
+                clip_bounds: text_clip_bounds,
             }) => {
                 let Some(buffer) = buffer.upgrade() else {
                     return;
@@ -574,10 +574,9 @@ impl Backend {
 
                 let (width, height) = buffer.size();
 
-                let physical_bounds =
-                    Rectangle::new(*position, Size::new(width, height))
-                        * transformation
-                        * scale_factor;
+                let physical_bounds = (*text_clip_bounds
+                    + transformation.translation())
+                    * scale_factor;
 
                 if !clip_bounds.intersects(&physical_bounds) {
                     return;
