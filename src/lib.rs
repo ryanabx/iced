@@ -218,8 +218,8 @@ pub use crate::core::border::{self, Border, Radius};
 pub use crate::core::color;
 pub use crate::core::gradient;
 pub use crate::core::{
-    id, layout::Limits, Alignment, Background, Border, Color, ContentFit, Degrees, Gradient,
-    Length, Padding, Pixels, Point, Radians, Rectangle, Shadow, Size,
+    id, layout::Limits, Alignment, Background, Color, ContentFit, Degrees,
+    Gradient, Length, Padding, Pixels, Point, Radians, Rectangle, Shadow, Size,
     Transformation, Vector,
 };
 

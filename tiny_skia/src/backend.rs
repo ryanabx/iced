@@ -389,8 +389,8 @@ impl Backend {
                         );
                     } else {
                         let transform = tiny_skia::Transform::from_translate(
-                            translation.x,
-                            translation.y,
+                            transformation.translation().x,
+                            transformation.translation().y,
                         );
 
                         // Draw corners that have too small border radii as having no border radius,
