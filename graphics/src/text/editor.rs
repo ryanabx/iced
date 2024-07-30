@@ -493,9 +493,11 @@ impl editor::Editor for Editor {
     }
 
     fn min_bounds(&self) -> Size {
-        let internal = self.internal();
-
-        text::measure(internal.editor.buffer())
+        text::measure(match self.internal().editor.buffer_ref() {
+            cosmic_text::BufferRef::Owned(buffer) => buffer,
+            cosmic_text::BufferRef::Borrowed(buffer) => buffer,
+            cosmic_text::BufferRef::Arc(buffer) => buffer,
+        })
     }
 
     fn update(
