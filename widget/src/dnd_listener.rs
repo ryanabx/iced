@@ -9,7 +9,7 @@ use crate::core::widget::OperationOutputWrapper;
 use crate::core::widget::{tree, Operation, Tree};
 use crate::core::{
     overlay, Clipboard, Element, Layout, Length, Point, Rectangle, Shell,
-    Widget,
+    Vector, Widget,
 };
 use sctk::reexports::client::protocol::wl_data_device_manager::DndAction;
 
@@ -289,11 +289,13 @@ where
         tree: &'b mut Tree,
         layout: Layout<'_>,
         renderer: &Renderer,
+        translation: Vector,
     ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
         self.content.as_widget_mut().overlay(
             &mut tree.children[0],
             layout.children().next().unwrap(),
             renderer,
+            translation,
         )
     }
 

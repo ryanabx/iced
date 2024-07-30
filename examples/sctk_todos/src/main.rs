@@ -393,8 +393,7 @@ impl Task {
                 let checkbox = checkbox(
                     &self.description,
                     self.completed,
-                    TaskMessage::Completed,
-                )
+                ).on_toggle(TaskMessage::Completed)
                 .width(Length::Fill);
 
                 row![

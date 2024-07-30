@@ -99,7 +99,7 @@ impl Pipeline {
                 scale_factor,
                 pixels,
                 clip_mask,
-                transformation
+                transformation,
             );
         });
     }

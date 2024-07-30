@@ -92,5 +92,6 @@ pub(crate) fn cursor_icon(cursor: Interaction) -> CursorIcon {
         Interaction::ResizingHorizontally => CursorIcon::EwResize,
         Interaction::ResizingVertically => CursorIcon::NsResize,
         Interaction::NotAllowed => CursorIcon::NotAllowed,
+        Interaction::ZoomIn => CursorIcon::ZoomIn,
     }
 }
