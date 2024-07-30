@@ -140,6 +140,7 @@ impl Default for State {
             drag_initiated: Default::default(),
             is_out_of_bounds: true,
             last_click: Default::default(),
+            is_hovered: Default::default(),
         }
     }
 }
@@ -243,15 +244,7 @@ where
             return event::Status::Captured;
         }
 
-        update(
-            self,
-            tree,
-            &event,
-            layout,
-            cursor,
-            shell,
-            tree.state.downcast_mut::<State>(),
-        )
+        update(self, tree, event, layout, cursor, shell)
     }
 
     fn mouse_interaction(
@@ -355,13 +348,11 @@ fn update<Message: Clone, Theme, Renderer>(
     layout: Layout<'_>,
     cursor: mouse::Cursor,
     shell: &mut Shell<'_, Message>,
-    state: &mut State,
 ) -> event::Status {
+    let state: &mut State = tree.state.downcast_mut();
     if let Event::Mouse(mouse::Event::CursorMoved { .. })
     | Event::Touch(touch::Event::FingerMoved { .. }) = event
     {
-        let state: &mut State = tree.state.downcast_mut();
-
         let was_hovered = state.is_hovered;
         state.is_hovered = cursor.is_over(layout.bounds());
 
@@ -388,14 +379,14 @@ fn update<Message: Clone, Theme, Renderer>(
     if !cursor.is_over(layout.bounds()) {
         if !state.is_out_of_bounds {
             if widget
-                .on_mouse_enter
+                .on_enter
                 .as_ref()
-                .or(widget.on_mouse_exit.as_ref())
+                .or(widget.on_exit.as_ref())
                 .is_some()
             {
                 if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
                     state.is_out_of_bounds = true;
-                    if let Some(message) = widget.on_mouse_exit.as_ref() {
+                    if let Some(message) = widget.on_exit.as_ref() {
                         shell.publish(message.clone());
                     }
                     return event::Status::Captured;
@@ -487,15 +478,12 @@ fn update<Message: Clone, Theme, Renderer>(
         }
     }
 
-    if let Some(message) = widget
-        .on_mouse_enter
-        .as_ref()
-        .or(widget.on_mouse_exit.as_ref())
+    if let Some(message) = widget.on_enter.as_ref().or(widget.on_exit.as_ref())
     {
         if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
             if state.is_out_of_bounds {
                 state.is_out_of_bounds = false;
-                if widget.on_mouse_enter.is_some() {
+                if widget.on_enter.is_some() {
                     shell.publish(message.clone());
                 }
                 return event::Status::Captured;

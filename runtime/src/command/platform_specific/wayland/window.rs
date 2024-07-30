@@ -390,6 +390,10 @@ impl<T> TryFrom<window::Action<T>> for Action<T> {
             window::Action::ChangeMode(id, mode) => {
                 Ok(Action::Mode(id, mode.into()))
             }
+            window::Action::RunWithHandle(id, handle) => {
+                // TODO(POP-OS): Implement
+                Err(Error::NotSupported)
+            }
         }
     }
 }

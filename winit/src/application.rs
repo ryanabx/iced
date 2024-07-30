@@ -1257,7 +1257,7 @@ pub fn run_command<A, C, E>(
 
                     if let Ok(handle) = window.window_handle() {
                         proxy
-                            .send_event(tag(&handle))
+                            .send_event(UserEventWrapper::Message(tag(&handle)))
                             .expect("Send message to event loop");
                     }
                 }
