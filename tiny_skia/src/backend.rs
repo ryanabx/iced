@@ -574,10 +574,14 @@ impl Backend {
 
                 let (width, height) = buffer.size();
 
-                let physical_bounds =
-                    Rectangle::new(*position, Size::new(width, height))
-                        * transformation
-                        * scale_factor;
+                let physical_bounds = Rectangle::new(
+                    *position,
+                    Size::new(
+                        width.unwrap_or_default(),
+                        height.unwrap_or_default(),
+                    ),
+                ) * transformation
+                    * scale_factor;
 
                 if !clip_bounds.intersects(&physical_bounds) {
                     return;
