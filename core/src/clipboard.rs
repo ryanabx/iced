@@ -35,7 +35,7 @@ pub trait Clipboard {
         >,
     ) {
     }
-    
+
     /// Starts a DnD operation.
     fn register_dnd_destination(
         &self,

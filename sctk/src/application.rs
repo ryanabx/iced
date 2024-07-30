@@ -2053,35 +2053,19 @@ where
                 ));
             }
             command::Action::Clipboard(action) => match action {
-                clipboard::Action::Read(s_to_msg) => {
-                    let contents = clipboard.read();
+                clipboard::Action::Read(s_to_msg, kind) => {
+                    let contents = clipboard.read(kind);
                     let message = s_to_msg(contents);
                     proxy.send_event(Event::Message(message));
                 }
-                clipboard::Action::Write(contents) => {
-                    clipboard.write(contents)
+                clipboard::Action::Write(contents, kind) => {
+                    clipboard.write(kind, contents)
                 }
-                clipboard::Action::WriteData(contents) => {
-                    clipboard.write_data(ClipboardStoreData(contents))
+                clipboard::Action::WriteData(contents, kind) => {
+                    clipboard.write_data(kind, ClipboardStoreData(contents))
                 },
-                clipboard::Action::ReadData(allowed, to_msg) => {
-                    let contents = clipboard.read_data(allowed);
-                    let message = to_msg(contents);
-                    proxy.send_event(Event::Message(message));
-                },
-                clipboard::Action::ReadPrimary(s_to_msg) => {
-                    let contents = clipboard.read_primary();
-                    let message = s_to_msg(contents);
-                    proxy.send_event(Event::Message(message));
-                },
-                clipboard::Action::WritePrimary(content) => {
-                    clipboard.write_primary(content)
-                },
-                clipboard::Action::WritePrimaryData(content) => {
-                    clipboard.write_primary_data(ClipboardStoreData(content))
-                },
-                clipboard::Action::ReadPrimaryData(a, to_msg) => {
-                    let contents = clipboard.read_primary_data(a);
+                clipboard::Action::ReadData(allowed, to_msg, kind) => {
+                    let contents = clipboard.read_data(kind, allowed);
                     let message = to_msg(contents);
                     proxy.send_event(Event::Message(message));
                 },
