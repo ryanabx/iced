@@ -358,6 +358,7 @@ impl<T> TryFrom<window::Action<T>> for Action<T> {
             }),
             window::Action::Drag(id) => Ok(Action::InteractiveMove { id }),
             window::Action::FetchSize(_, _)
+            | window::Action::FetchPosition(_, _) // TODO(POP-OS): This variant was added... Is this correct?
             | window::Action::FetchMaximized(_, _)
             | window::Action::Move(_, _)
             | window::Action::FetchMode(_, _)

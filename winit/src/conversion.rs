@@ -199,31 +199,27 @@ pub fn window_event(
             }
         },
         WindowEvent::KeyboardInput { event, .. } => {
-            let text_with_modifiers =
-                event.text_with_all_modifiers().map(|t| SmolStr::new);
-                let logical_key = {
-                    #[cfg(not(target_arch = "wasm32"))]
-                    {
-                        use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
-                        event.key_without_modifiers()
-                    }
-    
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        // TODO: Fix inconsistent API on Wasm
-                        event.logical_key
-                    }
-                };
-    
-                let text = {
+            let logical_key = {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
+                    event.key_without_modifiers()
+                }
+
+                #[cfg(target_arch = "wasm32")]
+                {
+                    // TODO: Fix inconsistent API on Wasm
+                    event.logical_key
+                }
+            };
+
+            let text = {
                     #[cfg(not(target_arch = "wasm32"))]
                     {
                         use crate::core::SmolStr;
                         use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
-    
                         event.text_with_all_modifiers().map(SmolStr::new)
                     }
-    
                     #[cfg(target_arch = "wasm32")]
                     {
                         // TODO: Fix inconsistent API on Wasm
@@ -231,9 +227,7 @@ pub fn window_event(
                     }
                 }.filter(|text| !text.as_str().chars().any(is_private_use));
             let winit::event::KeyEvent {
-                state,
-                location,
-                ..
+                state, location, ..
             } = event;
             Some(Event::Keyboard({
                 let key = key(logical_key);
@@ -260,7 +254,7 @@ pub fn window_event(
                             key,
                             modifiers,
                             location,
-                            text: text_with_modifiers,
+                            text,
                         }
                     }
                     winit::event::ElementState::Released => {

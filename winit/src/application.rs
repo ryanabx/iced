@@ -1193,7 +1193,9 @@ pub fn run_command<A, C, E>(
                         .ok();
 
                     proxy
-                        .send_event(callback(position))
+                        .send_event(UserEventWrapper::Message(callback(
+                            position,
+                        )))
                         .expect("Send message to event loop");
                 }
                 window::Action::Move(_id, position) => {

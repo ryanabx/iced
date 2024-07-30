@@ -163,6 +163,7 @@ where
             &self.theme,
             &renderer::Style {
                 text_color: appearance.text_color,
+                ..Default::default() // TODO(POP-OS): Is this correct?
             },
             layout,
             cursor,
