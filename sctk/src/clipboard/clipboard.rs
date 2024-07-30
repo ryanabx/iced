@@ -2,6 +2,7 @@
 pub use iced_runtime::clipboard::Action;
 
 use iced_runtime::command::{self, Command};
+use iced_style::core::clipboard::Kind;
 use raw_window_handle::HasDisplayHandle;
 use window_clipboard::mime::{self, ClipboardStoreData};
 
@@ -40,82 +41,77 @@ impl Clipboard {
 }
 
 impl iced_runtime::core::clipboard::Clipboard for Clipboard {
-    fn read(&self) -> Option<String> {
-        match &self.state {
-            State::Connected(clipboard) => clipboard.read().ok(),
-            State::Unavailable => None,
+    fn read(&self, kind: Kind) -> Option<String> {
+        match kind {
+            Kind::Primary => match &self.state {
+                State::Connected(clipboard) => {
+                    clipboard.read_primary().and_then(|res| res.ok())
+                }
+                State::Unavailable => None,
+            },
+            Kind::Standard => match &self.state {
+                State::Connected(clipboard) => clipboard.read().ok(),
+                State::Unavailable => None,
+            },
         }
     }
 
-    fn write(&mut self, contents: String) {
-        match &mut self.state {
-            State::Connected(clipboard) => _ = clipboard.write(contents),
-            State::Unavailable => {}
+    fn write(&mut self, kind: Kind, contents: String) {
+        match kind {
+            Kind::Primary => match &mut self.state {
+                State::Connected(clipboard) => {
+                    _ = clipboard.write_primary(contents)
+                }
+                State::Unavailable => {}
+            },
+            Kind::Standard => match &mut self.state {
+                State::Connected(clipboard) => _ = clipboard.write(contents),
+                State::Unavailable => {}
+            },
         }
     }
 
-    fn read_primary(&self) -> Option<String> {
-        match &self.state {
-            State::Connected(clipboard) => {
-                clipboard.read_primary().and_then(|res| res.ok())
-            }
-            State::Unavailable => None,
-        }
-    }
-
-    fn write_primary(&mut self, contents: String) {
-        match &mut self.state {
-            State::Connected(clipboard) => {
-                _ = clipboard.write_primary(contents)
-            }
-            State::Unavailable => {}
-        }
-    }
-
-    fn read_data(&self, mimes: Vec<String>) -> Option<(Vec<u8>, String)> {
-        match &self.state {
-            State::Connected(clipboard) => {
-                clipboard.read_raw(mimes).and_then(|res| res.ok())
-            }
-            State::Unavailable => None,
+    fn read_data(
+        &self,
+        kind: Kind,
+        mimes: Vec<String>,
+    ) -> Option<(Vec<u8>, String)> {
+        match kind {
+            Kind::Primary => match &self.state {
+                State::Connected(clipboard) => {
+                    clipboard.read_primary_raw(mimes).and_then(|res| res.ok())
+                }
+                State::Unavailable => None,
+            },
+            Kind::Standard => match &self.state {
+                State::Connected(clipboard) => {
+                    clipboard.read_raw(mimes).and_then(|res| res.ok())
+                }
+                State::Unavailable => None,
+            },
         }
     }
 
     fn write_data(
         &mut self,
+        kind: Kind,
         contents: ClipboardStoreData<
             Box<dyn Send + Sync + 'static + mime::AsMimeTypes>,
         >,
     ) {
-        match &mut self.state {
-            State::Connected(clipboard) => _ = clipboard.write_data(contents),
-            State::Unavailable => {}
-        }
-    }
-
-    fn read_primary_data(
-        &self,
-        mimes: Vec<String>,
-    ) -> Option<(Vec<u8>, String)> {
-        match &self.state {
-            State::Connected(clipboard) => {
-                clipboard.read_primary_raw(mimes).and_then(|res| res.ok())
-            }
-            State::Unavailable => None,
-        }
-    }
-
-    fn write_primary_data(
-        &mut self,
-        contents: ClipboardStoreData<
-            Box<dyn Send + Sync + 'static + mime::AsMimeTypes>,
-        >,
-    ) {
-        match &mut self.state {
-            State::Connected(clipboard) => {
-                _ = clipboard.write_primary_data(contents)
-            }
-            State::Unavailable => {}
+        match kind {
+            Kind::Primary => match &mut self.state {
+                State::Connected(clipboard) => {
+                    _ = clipboard.write_primary_data(contents)
+                }
+                State::Unavailable => {}
+            },
+            Kind::Standard => match &mut self.state {
+                State::Connected(clipboard) => {
+                    _ = clipboard.write_data(contents)
+                }
+                State::Unavailable => {}
+            },
         }
     }
 }
@@ -124,10 +120,16 @@ impl iced_runtime::core::clipboard::Clipboard for Clipboard {
 pub fn read<Message>(
     f: impl Fn(Option<String>) -> Message + 'static,
 ) -> Command<Message> {
-    Command::single(command::Action::Clipboard(Action::Read(Box::new(f))))
+    Command::single(command::Action::Clipboard(Action::Read(
+        Box::new(f),
+        Kind::Standard,
+    )))
 }
 
 /// Write the given contents to the clipboard.
 pub fn write<Message>(contents: String) -> Command<Message> {
-    Command::single(command::Action::Clipboard(Action::Write(contents)))
+    Command::single(command::Action::Clipboard(Action::Write(
+        contents,
+        Kind::Standard,
+    )))
 }

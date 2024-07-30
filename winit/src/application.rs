@@ -1122,27 +1122,11 @@ pub fn run_command<A, C, E>(
                 clipboard::Action::Write(contents, kind) => {
                     clipboard.write(kind, contents);
                 }
-                clipboard::Action::WriteData(contents) => {
-                    clipboard.write_data(ClipboardStoreData(contents))
+                clipboard::Action::WriteData(contents, kind) => {
+                    clipboard.write_data(kind, ClipboardStoreData(contents))
                 }
-                clipboard::Action::ReadData(allowed, to_msg) => {
-                    let contents = clipboard.read_data(allowed);
-                    let message = to_msg(contents);
-                    _ = proxy.send_event(UserEventWrapper::Message(message));
-                }
-                clipboard::Action::ReadPrimary(s_to_msg) => {
-                    let contents = clipboard.read_primary();
-                    let message = s_to_msg(contents);
-                    _ = proxy.send_event(UserEventWrapper::Message(message));
-                }
-                clipboard::Action::WritePrimary(content) => {
-                    clipboard.write_primary(content)
-                }
-                clipboard::Action::WritePrimaryData(content) => {
-                    clipboard.write_primary_data(ClipboardStoreData(content))
-                }
-                clipboard::Action::ReadPrimaryData(a, to_msg) => {
-                    let contents = clipboard.read_primary_data(a);
+                clipboard::Action::ReadData(allowed, to_msg, kind) => {
+                    let contents = clipboard.read_data(kind, allowed);
                     let message = to_msg(contents);
                     _ = proxy.send_event(UserEventWrapper::Message(message));
                 }

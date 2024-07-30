@@ -57,7 +57,7 @@ impl<M: Send + 'static> Clipboard<M> {
     /// Reads the current content of the [`Clipboard`] as text.
     pub fn read(&self, kind: Kind) -> Option<String> {
         match &self.state {
-            State::Connected(clipboard) => match kind {
+            State::Connected(clipboard, _) => match kind {
                 Kind::Standard => clipboard.read().ok(),
                 Kind::Primary => clipboard.read_primary().and_then(Result::ok),
             },
@@ -68,7 +68,7 @@ impl<M: Send + 'static> Clipboard<M> {
     /// Writes the given text contents to the [`Clipboard`].
     pub fn write(&mut self, kind: Kind, contents: String) {
         match &mut self.state {
-            State::Connected(clipboard) => {
+            State::Connected(clipboard, _) => {
                 let result = match kind {
                     Kind::Standard => clipboard.write(contents),
                     Kind::Primary => {

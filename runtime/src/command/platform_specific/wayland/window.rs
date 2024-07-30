@@ -370,7 +370,7 @@ impl<T> TryFrom<window::Action<T>> for Action<T> {
             | window::Action::ChangeIcon(_, _)
             | window::Action::Screenshot(_, _)
             | window::Action::FetchMinimized(_, _) => Err(Error::NotSupported),
-            window::Action::ShowWindowMenu(id) => {
+            window::Action::ShowSystemMenu(id) => {
                 Ok(Action::ShowWindowMenu { id })
             }
             window::Action::Maximize(id, maximized) => {
