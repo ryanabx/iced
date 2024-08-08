@@ -1594,8 +1594,8 @@ where
                 }
             }
             #[cfg(feature = "a11y")]
-            IcedSctkEvent::A11yEnabled => {
-                a11y_enabled = true;
+            IcedSctkEvent::A11yEnabled(enabled) => {
+                a11y_enabled = enabled;
             }
             #[cfg(feature = "a11y")]
             IcedSctkEvent::A11ySurfaceCreated(surface_id, adapter) => {
