@@ -43,6 +43,7 @@ use futures::channel::oneshot;
 
 use std::any::Any;
 use std::borrow::Cow;
+use std::fmt;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
 
@@ -57,10 +58,10 @@ pub enum UserEventWrapper<Message> {
     Message(Message),
     #[cfg(feature = "a11y")]
     /// A11y Action Request
-    A11y(iced_accessibility::accesskit_winit::ActionRequestEvent),
+    A11y(iced_accessibility::accesskit::ActionRequest),
     #[cfg(feature = "a11y")]
     /// A11y was enabled
-    A11yEnabled,
+    A11yEnabled(bool),
     /// CLipboard Message
     StartDnd {
         /// internal dnd
@@ -88,7 +89,7 @@ impl<M: std::fmt::Debug> std::fmt::Debug for UserEventWrapper<M> {
             #[cfg(feature = "a11y")]
             UserEventWrapper::A11y(a) => write!(f, "A11y({:?})", a),
             #[cfg(feature = "a11y")]
-            UserEventWrapper::A11yEnabled => write!(f, "A11yEnabled"),
+            UserEventWrapper::A11yEnabled(enabled) => write!(f, "A11yEnabled"),
             UserEventWrapper::StartDnd {
                 internal,
                 source_surface: _,
@@ -102,17 +103,6 @@ impl<M: std::fmt::Debug> std::fmt::Debug for UserEventWrapper<M> {
             ),
             UserEventWrapper::Dnd(_) => write!(f, "Dnd"),
         }
-    }
-}
-
-#[cfg(feature = "a11y")]
-impl<Message> From<iced_accessibility::accesskit_winit::ActionRequestEvent>
-    for UserEventWrapper<Message>
-{
-    fn from(
-        action_request: iced_accessibility::accesskit_winit::ActionRequestEvent,
-    ) -> Self {
-        UserEventWrapper::A11y(action_request)
     }
 }
 
@@ -622,6 +612,101 @@ async fn run_instance<A, E, C>(
         crate::proxy::Proxy::new(proxy.raw.clone()).0,
     );
     let mut cache = user_interface::Cache::default();
+
+    #[cfg(feature = "a11y")]
+    let mut commands: Vec<Command<A::Message>> = Vec::new();
+
+    #[cfg(feature = "a11y")]
+    let (window_a11y_id, mut adapter, mut a11y_enabled) = {
+        use iced_accessibility::accesskit::ActivationHandler;
+        use iced_accessibility::accesskit::{
+            NodeBuilder, NodeId, Role, Tree, TreeUpdate,
+        };
+        use iced_accessibility::accesskit_winit::Adapter;
+
+        pub struct WinitActivationHandler<M: 'static> {
+            pub proxy: Proxy<UserEventWrapper<M>>,
+            pub title: String,
+        }
+
+        impl<M: Send + 'static + fmt::Debug> ActivationHandler
+            for WinitActivationHandler<M>
+        {
+            fn request_initial_tree(
+                &mut self,
+            ) -> Option<iced_accessibility::accesskit::TreeUpdate> {
+                let node_id = core::id::window_node_id();
+
+                let _ = self.proxy.send(UserEventWrapper::A11yEnabled(true));
+                let mut node = NodeBuilder::new(Role::Window);
+                node.set_name(self.title.clone());
+                let node = node.build();
+                let root = NodeId(node_id);
+                Some(TreeUpdate {
+                    nodes: vec![(root, node)],
+                    tree: Some(Tree::new(root)),
+                    focus: root,
+                })
+            }
+        }
+
+        let activation_handler = WinitActivationHandler {
+            proxy: proxy.clone(),
+            title: state.title().to_string(),
+        };
+
+        pub struct WinitActionHandler<M: 'static> {
+            pub proxy: Proxy<UserEventWrapper<M>>,
+        }
+
+        impl<M: Send + 'static + fmt::Debug>
+            iced_accessibility::accesskit::ActionHandler
+            for WinitActionHandler<M>
+        {
+            fn do_action(
+                &mut self,
+                request: iced_accessibility::accesskit::ActionRequest,
+            ) {
+                let _ = self.proxy.send(UserEventWrapper::A11y(request));
+            }
+        }
+
+        let action_handler = WinitActionHandler {
+            proxy: proxy.clone(),
+        };
+
+        pub struct WinitDeactivationHandler<M: 'static> {
+            pub proxy: Proxy<UserEventWrapper<M>>,
+        }
+
+        impl<M: Send + 'static + fmt::Debug>
+            iced_accessibility::accesskit::DeactivationHandler
+            for WinitDeactivationHandler<M>
+        {
+            fn deactivate_accessibility(&mut self) {
+                let _ = self.proxy.send(UserEventWrapper::A11yEnabled(false));
+            }
+        }
+
+        let deactivation_handler = WinitDeactivationHandler {
+            proxy: proxy.clone(),
+        };
+
+        let node_id = core::id::window_node_id();
+        let title = state.title().to_string();
+        let mut proxy_clone = proxy.clone();
+        (
+            node_id,
+            Adapter::with_direct_handlers(
+                window.as_ref(),
+                activation_handler,
+                action_handler,
+                deactivation_handler,
+            ),
+            false,
+        )
+    };
+
     let mut surface = compositor.create_surface(
         window.clone(),
         physical_size.width,
@@ -676,40 +761,6 @@ async fn run_instance<A, E, C>(
     let mut messages = Vec::new();
     let mut user_events = 0;
     let mut redraw_pending = false;
-    #[cfg(feature = "a11y")]
-    let mut commands: Vec<Command<A::Message>> = Vec::new();
-
-    #[cfg(feature = "a11y")]
-    let (window_a11y_id, adapter, mut a11y_enabled) = {
-        let node_id = core::id::window_node_id();
-
-        use iced_accessibility::accesskit::{
-            NodeBuilder, NodeId, Role, Tree, TreeUpdate,
-        };
-        use iced_accessibility::accesskit_winit::Adapter;
-        let title = state.title().to_string();
-        let mut proxy_clone = proxy.clone();
-        (
-            node_id,
-            Adapter::new(
-                window.as_ref(),
-                move || {
-                    let _ = proxy_clone.send(UserEventWrapper::A11yEnabled);
-                    let mut node = NodeBuilder::new(Role::Window);
-                    node.set_name(title.clone());
-                    let node = node.build(&mut iced_accessibility::accesskit::NodeClassSet::lock_global());
-                    let root = NodeId(node_id);
-                    TreeUpdate {
-                        nodes: vec![(root, node)],
-                        tree: Some(Tree::new(root)),
-                        focus: root,
-                    }
-                },
-                proxy.raw.clone(),
-            ),
-            false,
-        )
-    };
 
     debug.startup_finished();
 
@@ -736,21 +787,23 @@ async fn run_instance<A, E, C>(
                     UserEventWrapper::Message(m) => messages.push(m),
                     #[cfg(feature = "a11y")]
                     UserEventWrapper::A11y(request) => {
-                        match request.request.action {
+                        match request.action {
                             iced_accessibility::accesskit::Action::Focus => {
                                 commands.push(Command::widget(focus(
                                     core::widget::Id::from(u128::from(
-                                        request.request.target.0,
+                                        request.target.0,
                                     )
                                         as u64),
                                 )));
                             }
                             _ => {}
                         }
-                        events.push(conversion::a11y(request.request));
+                        events.push(conversion::a11y(request));
                     }
                     #[cfg(feature = "a11y")]
-                    UserEventWrapper::A11yEnabled => a11y_enabled = true,
+                    UserEventWrapper::A11yEnabled(enabled) => {
+                        a11y_enabled = enabled;
+                    }
                     UserEventWrapper::StartDnd {
                         internal,
                         source_surface: _, // not needed if there is only one window
