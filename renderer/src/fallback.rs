@@ -195,11 +195,12 @@ where
         bounds: Rectangle,
         rotation: Radians,
         opacity: f32,
+        border_radius: [f32; 4],
     ) {
         delegate!(
             self,
             renderer,
-            renderer.draw_svg(handle, color, bounds, rotation, opacity)
+            renderer.draw_svg(handle, color, bounds, rotation, opacity, border_radius)
         );
     }
 }

@@ -281,6 +281,7 @@ where
                 drawing_bounds,
                 self.rotation.radians(),
                 self.opacity,
+                [0.0, 0.0, 0.0, 0.0], // TODO(POP): border_radius isn't defined anywhere?
             );
         };
 

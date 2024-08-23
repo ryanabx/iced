@@ -194,6 +194,7 @@ impl svg::Renderer for () {
         _bounds: Rectangle,
         _rotation: Radians,
         _opacity: f32,
+        _border_radius: [f32; 4],
     ) {
     }
 }

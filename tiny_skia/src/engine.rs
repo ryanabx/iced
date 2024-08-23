@@ -610,6 +610,7 @@ impl Engine {
                 bounds,
                 rotation,
                 opacity,
+                border_radius,
             } => {
                 let physical_bounds = *bounds * _transformation;
 
