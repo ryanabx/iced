@@ -1,7 +1,7 @@
 // Shows a subsurface with a 1x1 px red buffer, stretch to window size
 
 use iced::{
-    event::wayland::Event as WaylandEvent, wayland::InitialSurface,
+    event::wayland::Event as WaylandEvent, wayland::application::InitialSurface,
     widget::text, window, Application, Command, Element, Length, Subscription,
     Theme,
 };
@@ -34,6 +34,7 @@ impl Application for SubsurfaceApp {
     type Message = Message;
     type Flags = ();
     type Theme = Theme;
+    type Renderer = iced::Renderer;
 
     fn new(_flags: ()) -> (SubsurfaceApp, Command<Self::Message>) {
         (
@@ -98,7 +99,7 @@ impl Application for SubsurfaceApp {
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
-        let mut subscriptions = vec![iced::event::listen_with(|evt, _| {
+        let mut subscriptions = vec![iced::event::listen_with(|evt, _, _| {
             if let iced::Event::PlatformSpecific(
                 iced::event::PlatformSpecific::Wayland(evt),
             ) = evt
