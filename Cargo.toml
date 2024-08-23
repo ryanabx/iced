@@ -206,7 +206,7 @@ tracing = "0.1"
 unicode-segmentation = "1.0"
 wasm-bindgen-futures = "0.4"
 wasm-timer = "0.2"
-web-sys = "=0.3.67"
+web-sys = "0.3"
 wayland-protocols = { version = "0.32.1", features = ["staging"] }
 # web-time = "1.1"
 web-time = "0.2"
